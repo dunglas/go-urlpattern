@@ -21,17 +21,17 @@ type constructorTypeParser struct {
 type state uint8
 
 const (
-	sInit state = iota
-	protocol
-	authority
-	username
-	password
-	hostname
-	port
-	pathname
-	search
-	hash
-	done
+	stateInit state = iota
+	stateProtocol
+	sateAuthority
+	stateUsername
+	statePassword
+	stateHostname
+	statePort
+	statePathname
+	stateSearch
+	stateHash
+	stateDone
 )
 
 func newConstructorTypeParser(input string, tokenList []token) constructorTypeParser {
@@ -40,7 +40,7 @@ func newConstructorTypeParser(input string, tokenList []token) constructorTypePa
 		tokenList:      tokenList,
 		result:         urlPatternInit{},
 		tokenIncrement: 1,
-		state:          sInit,
+		state:          stateInit,
 	}
 }
 
@@ -59,16 +59,16 @@ func parseConstructorString(input string) error {
 		p.tokenIncrement = 1
 
 		if p.tokenList[p.tokenIndex].tType == tokenEnd {
-			if p.state == sInit {
+			if p.state == stateInit {
 				p.rewind()
 
 				if p.isHashPrefix() {
-					p.changeState(hash, 1)
+					p.changeState(stateHash, 1)
 				} else if p.isSearchPrefix() {
-					p.changeState(search, 1)
+					p.changeState(stateSearch, 1)
 					//p.result.Hash = ""
 				} else {
-					p.changeState(pathname, 0)
+					p.changeState(statePathname, 0)
 					//p.result.Hash = ""
 					//p.result.Search = ""
 				}
@@ -78,14 +78,14 @@ func parseConstructorString(input string) error {
 				continue
 			}
 
-			if p.state == authority {
-				p.rewindAndSetState(hostname)
+			if p.state == sateAuthority {
+				p.rewindAndSetState(stateHostname)
 				p.tokenIndex += p.tokenIncrement
 
 				continue
 			}
 
-			p.changeState(done, 0)
+			p.changeState(stateDone, 0)
 
 			break
 		}
@@ -189,21 +189,21 @@ func (p *constructorTypeParser) getSafeToken(index int) token {
 func (p *constructorTypeParser) changeState(newState state, skip int) {
 	// ignore sInit, authority and done
 	switch p.state {
-	case protocol:
+	case stateProtocol:
 		p.result.Protocol = p.makeComponentString()
-	case username:
+	case stateUsername:
 		p.result.Username = p.makeComponentString()
-	case password:
+	case statePassword:
 		p.result.Password = p.makeComponentString()
-	case hostname:
+	case stateHostname:
 		p.result.Hostname = p.makeComponentString()
-	case port:
+	case statePort:
 		p.result.Port = p.makeComponentString()
-	case pathname:
+	case statePathname:
 		p.result.Pathname = p.makeComponentString()
-	case search:
+	case stateSearch:
 		p.result.Search = p.makeComponentString()
-	case hash:
+	case stateHash:
 		p.result.Hash = p.makeComponentString()
 	}
 
