@@ -292,3 +292,13 @@ func isIdentifierPart(codePoint rune) bool {
 func isASCII(codePoint rune) bool {
 	return codePoint >= 0 && codePoint <= unicode.MaxASCII
 }
+
+func isASCIIString(input string) bool {
+	for i := 0; i < len(input); i++ {
+		if input[i] > unicode.MaxASCII {
+			return false
+		}
+	}
+
+	return true
+}

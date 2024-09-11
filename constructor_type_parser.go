@@ -1,8 +1,14 @@
 package urlpattern
 
-import "golang.org/x/exp/utf8string"
+import (
+	"regexp"
 
-// https://wicg.github.io/urlpattern/#constructor-string-parsing
+	"golang.org/x/exp/utf8string"
+)
+
+type state uint8
+
+// https://urlpattern.spec.whatwg.org/#constructor-string-parsing
 
 type constructorTypeParser struct {
 	input                         utf8string.String
@@ -17,8 +23,7 @@ type constructorTypeParser struct {
 	state                         state
 }
 
-// https://wicg.github.io/urlpattern/#constructor-string-parser-state
-type state uint8
+// https://urlpattern.spec.whatwg.org/#constructor-string-parser-state
 
 const (
 	stateInit state = iota
@@ -34,6 +39,7 @@ const (
 	stateDone
 )
 
+// https://urlpattern.spec.whatwg.org/#parse-a-constructor-string
 func newConstructorTypeParser(input string, tokenList []token) constructorTypeParser {
 	return constructorTypeParser{
 		input:          *utf8string.NewString(input),
@@ -44,11 +50,11 @@ func newConstructorTypeParser(input string, tokenList []token) constructorTypePa
 	}
 }
 
-// https://wicg.github.io/urlpattern/#constructor-string-parsing
-func parseConstructorString(input string) error {
+// https://urlpattern.spec.whatwg.org/#constructor-string-parsing
+func parseConstructorString(input string) (*urlPatternInit, error) {
 	tl, err := tokenize(input, tokenizePolicyLenient)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	p := newConstructorTypeParser(input, tl)
@@ -108,25 +114,119 @@ func parseConstructorString(input string) error {
 		}
 
 		// Switch on parser’s state and run the associated steps:
+		switch p.state {
+		case stateInit:
+			if p.isProtocolSuffix() {
+				p.rewindAndSetState(stateProtocol)
+			}
+		case stateProtocol:
+			if p.isProtocolSuffix() {
+				p.computeProtocolMatchesSpecialSchemeFlag()
+				nextState := statePathname
+				skip := 1
+
+				if p.nextIsAuthoritySlashes() {
+					nextState = sateAuthority
+					skip = 3
+				} else if p.protocolMatchesASpecialScheme {
+					nextState = sateAuthority
+				}
+
+				p.changeState(nextState, skip)
+			}
+
+		case sateAuthority:
+			if p.isIdentityTerminator() {
+				p.rewindAndSetState(stateUsername)
+			} else if p.isPathnameStart() ||
+				p.isSearchPrefix() ||
+				p.isHashPrefix() {
+				p.rewindAndSetState(stateHostname)
+			}
+
+		case stateUsername:
+			if p.isPasswordPrefix() {
+				p.changeState(statePassword, 1)
+			} else if p.isIdentityTerminator() {
+				p.changeState(stateHostname, 1)
+			}
+
+		case statePassword:
+			if p.isIdentityTerminator() {
+				p.changeState(stateHostname, 1)
+			}
+
+		case stateHostname:
+			if p.isIPV6Open() {
+				p.hostnameIPv6BracketDepth++
+			} else if p.isIPV6Close() {
+				p.hostnameIPv6BracketDepth--
+			} else if p.isPortPrefix() && p.hostnameIPv6BracketDepth == 0 {
+				p.changeState(statePort, 1)
+			} else if p.isPathnameStart() {
+				p.changeState(statePathname, 0)
+			} else if p.isSearchPrefix() {
+				p.changeState(stateSearch, 1)
+			} else if p.isHashPrefix() {
+				p.changeState(stateHash, 1)
+			}
+
+		case statePort:
+			if p.isPathnameStart() {
+				p.changeState(statePathname, 0)
+			} else if p.isSearchPrefix() {
+				p.changeState(stateSearch, 1)
+			} else if p.isHashPrefix() {
+				p.changeState(stateHash, 1)
+			}
+
+		case statePathname:
+			if p.isSearchPrefix() {
+				p.changeState(stateSearch, 1)
+			} else if p.isHashPrefix() {
+				p.changeState(stateHash, 1)
+			}
+
+		case stateSearch:
+			if p.isHashPrefix() {
+				p.changeState(stateHash, 1)
+			}
+
+		case stateHash:
+			// noop
+
+		case stateDone:
+			// Assert: This step is never reached.
+			panic("done state must never be reached")
+		}
+
+		p.tokenIndex += p.tokenIncrement
 	}
 
-	return nil
+	// If parser’s result contains "hostname" and not "port", then set parser’s result["port"] to the empty string.
+	// not necessary because of Go's zero values
+
+	return &p.result, nil
 }
 
+// https://urlpattern.spec.whatwg.org/#rewind
 func (p *constructorTypeParser) rewind() {
 	p.tokenIndex = p.componentStart
 	p.tokenIncrement = 0
 }
 
+// https://urlpattern.spec.whatwg.org/#rewind-and-set-state
 func (p *constructorTypeParser) rewindAndSetState(s state) {
 	p.rewind()
 	p.state = s
 }
 
+// https://urlpattern.spec.whatwg.org/#is-a-hash-prefix
 func (p *constructorTypeParser) isHashPrefix() bool {
 	return p.isNonSpecialPatternChar(p.tokenIndex, "#")
 }
 
+// https://urlpattern.spec.whatwg.org/#is-a-search-prefix
 func (p *constructorTypeParser) isSearchPrefix() bool {
 	if p.isNonSpecialPatternChar(p.tokenIndex, "?") {
 		return true
@@ -159,14 +259,17 @@ func (p *constructorTypeParser) isSearchPrefix() bool {
 	return true
 }
 
+// https://urlpattern.spec.whatwg.org/#is-a-group-open
 func (p *constructorTypeParser) isGroupOpen() bool {
 	return p.tokenList[p.tokenIndex].tType == tokenOpen
 }
 
+// https://urlpattern.spec.whatwg.org/#is-a-group-close
 func (p *constructorTypeParser) isGroupClose() bool {
 	return p.tokenList[p.tokenIndex].tType == tokenClose
 }
 
+// https://urlpattern.spec.whatwg.org/#is-a-non-special-pattern-char
 func (p *constructorTypeParser) isNonSpecialPatternChar(index int, value string) bool {
 	token := p.getSafeToken(index)
 	if token.value != value {
@@ -176,6 +279,7 @@ func (p *constructorTypeParser) isNonSpecialPatternChar(index int, value string)
 	return token.tType == tokenChar || token.tType == tokenEscapedChar || token.tType == tokenInvalidChar
 }
 
+// https://urlpattern.spec.whatwg.org/#get-a-safe-token
 func (p *constructorTypeParser) getSafeToken(index int) token {
 	len := len(p.tokenList)
 
@@ -186,6 +290,7 @@ func (p *constructorTypeParser) getSafeToken(index int) token {
 	return p.tokenList[len-1]
 }
 
+// https://urlpattern.spec.whatwg.org/#change-state
 func (p *constructorTypeParser) changeState(newState state, skip int) {
 	// ignore sInit, authority and done
 	switch p.state {
@@ -213,6 +318,7 @@ func (p *constructorTypeParser) changeState(newState state, skip int) {
 	p.tokenIncrement = 0
 }
 
+// https://urlpattern.spec.whatwg.org/#make-a-component-string
 func (p *constructorTypeParser) makeComponentString() string {
 	token := p.tokenList[p.tokenIndex]
 	componentStartToken := p.getSafeToken(int(p.componentStart))
@@ -220,4 +326,100 @@ func (p *constructorTypeParser) makeComponentString() string {
 	endIndex := token.index
 
 	return p.input.Slice(componentStartInputIndex, endIndex)
+}
+
+// https://urlpattern.spec.whatwg.org/#is-a-protocol-suffix
+func (p *constructorTypeParser) isProtocolSuffix() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, ":")
+}
+
+// https://urlpattern.spec.whatwg.org/#compute-protocol-matches-a-special-scheme-flag
+func (p *constructorTypeParser) computeProtocolMatchesSpecialSchemeFlag() error {
+	protocol := p.makeComponentString()
+	protocolComponent, err := compileComponent(protocol, canonicalizeProtocol, options{})
+	if err != nil {
+		return err
+	}
+
+	if protocolComponent.protocolComponentMatchesSpecialScheme() {
+		p.protocolMatchesASpecialScheme = true
+	}
+
+	return nil
+}
+
+// https://urlpattern.spec.whatwg.org/#next-is-authority-slashes
+func (p *constructorTypeParser) nextIsAuthoritySlashes() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex+1, "/") && p.isNonSpecialPatternChar(p.tokenIndex+2, "/")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-an-identity-terminator
+func (p *constructorTypeParser) isIdentityTerminator() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, "@")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-a-pathname-start
+func (p *constructorTypeParser) isPathnameStart() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, "/")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-a-password-prefix
+func (p *constructorTypeParser) isPasswordPrefix() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, ":")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-a-port-prefix
+func (p *constructorTypeParser) isPortPrefix() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, ":")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-an-ipv6-open
+func (p *constructorTypeParser) isIPV6Open() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, "[")
+}
+
+// https://urlpattern.spec.whatwg.org/#is-an-ipv6-close
+func (p *constructorTypeParser) isIPV6Close() bool {
+	return p.isNonSpecialPatternChar(p.tokenIndex, "]")
+}
+
+// https://urlpattern.spec.whatwg.org/#compile-a-component
+func compileComponent(input string, encodencodingCallback encodingCallback, options options) (*component, error) {
+	partList, err := parsePatternString(input, options, encodencodingCallback)
+	if err != nil {
+		return nil, err
+	}
+
+	// Let (regular expression string, name list) be the result of running generate a regular expression and name list given part list and options.
+	regularExpressionString, nameList, err := partList.generateRegularExpressionAndNameList(options)
+	if err != nil {
+		return nil, err
+	}
+
+	// the v flag doesn't exist and is useless in Go
+	if options.ignoreCase {
+		// TODO: do this in generateRegularExpressionAndNameList (micro-optim)
+		regularExpressionString = "(i)" + regularExpressionString
+	}
+
+	regularExpression, err := regexp.Compile(regularExpressionString)
+	if err != nil {
+		return nil, err
+	}
+
+	patternString, err := partList.generatePatternString(options)
+	if err != nil {
+		return nil, err
+	}
+
+	var hasRegexpGroups bool
+	for _, part := range partList {
+		if part.pType == partRegexp {
+			hasRegexpGroups = true
+
+			break
+		}
+	}
+
+	return &component{patternString, regularExpression, nameList, hasRegexpGroups}, nil
 }
