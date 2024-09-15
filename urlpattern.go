@@ -5,9 +5,10 @@ package urlpattern
 
 import (
 	"errors"
-	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/dunglas/whatwg-url/url"
 )
 
 var (
@@ -16,22 +17,11 @@ var (
 )
 
 // https://url.spec.whatwg.org/#special-scheme
-var specialSchemeList = []string{"ftp", "file", "http", "https", "ws", "wss"}
-
-// https://urlpattern.spec.whatwg.org/#urlpattern
-type URLPattern struct {
-	Protocol *string
-	Username *string
-	Password *string
-	Hostname *string
-	Port     *string
-	Pathname *string
-	Search   *string
-	Hash     *string
-}
+var specialSchemeList = []string{"ftp", "http", "https", "ws", "wss"}
 
 type URLPatternResult struct {
-	Inputs []string
+	Inputs     []string
+	InitInputs []*URLPatternInit
 
 	Protocol URLPatternComponentResult
 	Username URLPatternComponentResult
@@ -49,7 +39,7 @@ type URLPatternComponentResult struct {
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-struct
-type urlPatternStruct struct {
+type URLPattern struct {
 	protocol *component
 	username *component
 	password *component
@@ -58,6 +48,46 @@ type urlPatternStruct struct {
 	pathname *component
 	search   *component
 	hash     *component
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-protocol
+func (u *URLPattern) Protocol() string {
+	return u.protocol.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-username
+func (u *URLPattern) Username() string {
+	return u.username.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-password
+func (u *URLPattern) Password() string {
+	return u.password.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-hostname
+func (u *URLPattern) Hostname() string {
+	return u.hostname.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-port
+func (u *URLPattern) Port() string {
+	return u.port.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-pathname
+func (u *URLPattern) Pathname() string {
+	return u.pathname.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-search
+func (u *URLPattern) Search() string {
+	return u.search.patternString
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-hash
+func (u *URLPattern) Hash() string {
+	return u.hash.patternString
 }
 
 // https://urlpattern.spec.whatwg.org/#component
@@ -80,25 +110,25 @@ func (c *component) protocolComponentMatchesSpecialScheme() bool {
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-create
-func New(input string, baseURL string, options Options) (*urlPatternStruct, error) {
+func New(input string, baseURL *string, options Options) (*URLPattern, error) {
 	init, err := parseConstructorString(input)
 	if err != nil {
 		return nil, err
 	}
 
-	if baseURL == "" && *init.Protocol == "" {
+	if baseURL == nil && init.Protocol == nil {
 		return nil, NoBaseURLError
 	}
 
-	if baseURL != "" {
-		init.baseURL = &baseURL
+	if baseURL != nil {
+		init.BaseURL = baseURL
 	}
 
-	return NewFromURLPatternInit(init, options)
+	return init.New(options)
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-create
-func NewFromURLPatternInit(init *urlPatternInit, opt Options) (*urlPatternStruct, error) {
+func (init *URLPatternInit) New(opt Options) (*URLPattern, error) {
 	processedInit, err := init.process("pattern", nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
@@ -133,14 +163,14 @@ func NewFromURLPatternInit(init *urlPatternInit, opt Options) (*urlPatternStruct
 	var emptyString string
 	for _, s := range specialSchemeList {
 		if *processedInit.Protocol == s && *processedInit.Port == DefaultPorts[s] {
-			processedInit.Protocol = &emptyString
+			processedInit.Port = &emptyString
 			break
 		}
 	}
 
 	defaultOptions := options{}
 
-	urlPattern := &urlPatternStruct{}
+	urlPattern := &URLPattern{}
 	urlPattern.protocol, err = compileComponent(*processedInit.Protocol, canonicalizeProtocol, defaultOptions)
 	if err != nil {
 		return nil, err
@@ -163,8 +193,13 @@ func NewFromURLPatternInit(init *urlPatternInit, opt Options) (*urlPatternStruct
 		if err != nil {
 			return nil, err
 		}
+	} else if urlPattern.protocol.protocolComponentMatchesSpecialScheme() || *processedInit.Protocol == "*" {
+		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeDomainName, hostnameOptions)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeHostname, hostnameOptions)
+		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, func(s string) (string, error) { return canonicalizeHostname(s, "") }, hostnameOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -175,19 +210,14 @@ func NewFromURLPatternInit(init *urlPatternInit, opt Options) (*urlPatternStruct
 		return nil, err
 	}
 
-	urlPattern.port, err = compileComponent(*processedInit.Port, func(s string) (string, error) { return canonicalizePort(s, "") }, defaultOptions)
-	if err != nil {
-		return nil, err
-	}
-
 	compileOptions := defaultOptions
-	compileOptions.ignoreCase = opt.ignoreCase
+	compileOptions.ignoreCase = opt.IgnoreCase
 
 	pathnameOptions := options{'/', '/', false}
 
 	if urlPattern.protocol.protocolComponentMatchesSpecialScheme() {
 		pathCompileOptions := pathnameOptions
-		pathCompileOptions.ignoreCase = opt.ignoreCase
+		pathCompileOptions.ignoreCase = opt.IgnoreCase
 
 		urlPattern.pathname, err = compileComponent(*processedInit.Pathname, canonicalizePathname, pathCompileOptions)
 		if err != nil {
@@ -213,8 +243,43 @@ func NewFromURLPatternInit(init *urlPatternInit, opt Options) (*urlPatternStruct
 	return urlPattern, nil
 }
 
-// https://urlpattern.spec.whatwg.org/#url-pattern-match
-func (u *urlPatternStruct) Match(input, baseURLString string) *URLPatternResult {
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-exec
+func (u *URLPattern) ExecInit(input *URLPatternInit) *URLPatternResult {
+	protocol := ""
+	username := ""
+	password := ""
+	hostname := ""
+	port := ""
+	pathname := ""
+	search := ""
+	hash := ""
+
+	inputs := []*URLPatternInit{input}
+
+	applyResult, err := input.process("url", &protocol, &username, &password, &hostname, &port, &pathname, &search, &hash)
+	if err != nil {
+		return nil
+	}
+
+	protocol = *applyResult.Protocol
+	username = *applyResult.Username
+	password = *applyResult.Password
+	hostname = *applyResult.Hostname
+	port = *applyResult.Port
+	pathname = *applyResult.Pathname
+	search = *applyResult.Search
+	hash = *applyResult.Hash
+
+	r := u.match(protocol, username, password, hostname, port, pathname, search, hash)
+	if r != nil {
+		r.InitInputs = inputs
+	}
+
+	return r
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-exec
+func (u *URLPattern) Exec(input, baseURLString string) *URLPatternResult {
 	protocol := ""
 	username := ""
 	password := ""
@@ -226,7 +291,7 @@ func (u *urlPatternStruct) Match(input, baseURLString string) *URLPatternResult 
 
 	inputs := []string{input}
 
-	var baseURL *url.URL
+	var baseURL *url.Url
 	var err error
 
 	if baseURLString != "" {
@@ -238,24 +303,30 @@ func (u *urlPatternStruct) Match(input, baseURLString string) *URLPatternResult 
 		inputs = append(inputs, baseURLString)
 	}
 
-	ur, err := url.Parse(input)
+	ur, err := urlParser.BasicParser(input, baseURL, nil, url.NoState)
 	if err != nil {
 		return nil
 	}
 
-	if baseURL != nil {
-		ur.ResolveReference(baseURL)
-	}
-
-	protocol = ur.Scheme
-	username = ur.User.Username()
-	password, _ = ur.User.Password()
+	protocol = ur.Scheme()
+	username = ur.Username()
+	password = ur.Password()
 	hostname = ur.Hostname()
 	port = ur.Port()
-	pathname = ur.EscapedPath()
-	search = ur.Query().Encode()
-	hash = ur.EscapedFragment()
+	pathname = ur.Pathname()
+	search = ur.Query()
+	hash = ur.Fragment()
 
+	r := u.match(protocol, username, password, hostname, port, pathname, search, hash)
+	if r != nil {
+		r.Inputs = inputs
+	}
+
+	return r
+}
+
+// https://urlpattern.spec.whatwg.org/#url-pattern-match
+func (u *URLPattern) match(protocol, username, password, hostname, port, pathname, search, hash string) *URLPatternResult {
 	protocolExecResult := u.protocol.regularExpression.FindStringSubmatch(protocol)
 	usernameExecResult := u.username.regularExpression.FindStringSubmatch(username)
 	passwordExecResult := u.password.regularExpression.FindStringSubmatch(password)
@@ -265,18 +336,18 @@ func (u *urlPatternStruct) Match(input, baseURLString string) *URLPatternResult 
 	searchExecResult := u.search.regularExpression.FindStringSubmatch(search)
 	hashExecResult := u.hash.regularExpression.FindStringSubmatch(hash)
 
-	if protocolExecResult == nil &&
-		usernameExecResult == nil &&
-		passwordExecResult == nil &&
-		hostnameExecResult == nil &&
-		portExecResult == nil &&
-		pathnameExecResult == nil &&
-		searchExecResult == nil &&
+	if protocolExecResult == nil ||
+		usernameExecResult == nil ||
+		passwordExecResult == nil ||
+		hostnameExecResult == nil ||
+		portExecResult == nil ||
+		pathnameExecResult == nil ||
+		searchExecResult == nil ||
 		hashExecResult == nil {
 		return nil
 	}
 
-	result := &URLPatternResult{Inputs: inputs}
+	result := &URLPatternResult{}
 	result.Protocol = createComponentMatchResult(*u.protocol, protocol, protocolExecResult)
 	result.Username = createComponentMatchResult(*u.username, username, usernameExecResult)
 	result.Password = createComponentMatchResult(*u.password, password, passwordExecResult)
@@ -289,12 +360,18 @@ func (u *urlPatternStruct) Match(input, baseURLString string) *URLPatternResult 
 	return result
 }
 
-func (u *urlPatternStruct) Test(input, baseURL string) bool {
-	return u.Match(input, baseURL) != nil
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-test
+func (u *URLPattern) Test(input, baseURL string) bool {
+	return u.Exec(input, baseURL) != nil
+}
+
+// https://urlpattern.spec.whatwg.org/#dom-urlpattern-test
+func (u *URLPattern) TestInit(input *URLPatternInit) bool {
+	return u.ExecInit(input) != nil
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-has-regexp-groups
-func (u *urlPatternStruct) HasRegexpGroups() bool {
+func (u *URLPattern) HasRegexpGroups() bool {
 	return u.protocol.hasRegexpGroups ||
 		u.username.hasRegexpGroups ||
 		u.password.hasRegexpGroups ||
@@ -307,8 +384,13 @@ func (u *urlPatternStruct) HasRegexpGroups() bool {
 
 // https://urlpattern.spec.whatwg.org/#create-a-component-match-result
 func createComponentMatchResult(component component, input string, execResult []string) URLPatternComponentResult {
-	result := URLPatternComponentResult{Input: input, Groups: make(map[string]string, len(execResult))}
+	result := URLPatternComponentResult{Input: input}
 
+	if len(execResult)-1 == 0 || (len(execResult) == 2 && execResult[0] == "" && execResult[1] == "") {
+		return result
+	}
+
+	result.Groups = make(map[string]string, len(execResult)-1)
 	for index := 1; index < len(execResult); index++ {
 		name := component.groupNameList[index-1]
 		value := execResult[index]
@@ -320,51 +402,57 @@ func createComponentMatchResult(component component, input string, execResult []
 }
 
 type Options struct {
-	ignoreCase bool
+	IgnoreCase bool
 }
 
 // https://urlpattern.spec.whatwg.org/#dictdef-urlpatterninit
-type urlPatternInit struct {
-	URLPattern
-	baseURL *string
+type URLPatternInit struct {
+	Protocol *string
+	Username *string
+	Password *string
+	Hostname *string
+	Port     *string
+	Pathname *string
+	Search   *string
+	Hash     *string
+
+	BaseURL *string
 }
 
 // https://urlpattern.spec.whatwg.org/#process-a-urlpatterninit
-func (init *urlPatternInit) process(iType string, protocol, username, password, hostname, port, pathname, search, hash *string) (*urlPatternInit, error) {
-	result := &urlPatternInit{
-		URLPattern: URLPattern{protocol, username, password, hostname, port, pathname, search, hash},
-	}
+func (init *URLPatternInit) process(iType string, protocol, username, password, hostname, port, pathname, search, hash *string) (*URLPatternInit, error) {
+	result := &URLPatternInit{protocol, username, password, hostname, port, pathname, search, hash, nil}
 
 	var (
-		baseURL *url.URL
+		baseURL *url.Url
 		err     error
 	)
-	if init.baseURL != nil {
-		baseURL, err = url.Parse(*init.baseURL)
+	if init.BaseURL != nil {
+		baseURL, err = url.Parse(*init.BaseURL)
 		if err != nil {
 			return nil, err
 		}
 
 		if init.Protocol == nil {
-			p := processBaseURLString(baseURL.Scheme, iType)
+			p := processBaseURLString(baseURL.Scheme(), iType)
 			result.Protocol = &p
 		}
 
 		// TODO: the end of this block can be simplified, but let's be as close as possible from the standard algorithm for now
 
 		if iType != "pattern" && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil {
-			u := processBaseURLString(baseURL.User.Username(), iType)
+			u := processBaseURLString(baseURL.Username(), iType)
 			result.Username = &u
 		}
 
 		if iType != "pattern" && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil && init.Password == nil {
-			password, _ := baseURL.User.Password()
+			password := baseURL.Password()
 			p := processBaseURLString(password, iType)
 			result.Password = &p
 		}
 
 		if init.Protocol == nil && init.Hostname == nil {
-			baseHost := baseURL.Host
+			baseHost := baseURL.Hostname()
 			h := processBaseURLString(baseHost, iType)
 			result.Hostname = &h
 		}
@@ -375,17 +463,17 @@ func (init *urlPatternInit) process(iType string, protocol, username, password, 
 		}
 
 		if init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Pathname == nil {
-			p := processBaseURLString(baseURL.EscapedPath(), iType)
+			p := processBaseURLString(baseURL.Pathname(), iType)
 			result.Pathname = &p
 		}
 
 		if init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Pathname == nil && init.Search == nil {
-			s := processBaseURLString(baseURL.RawQuery, iType)
+			s := processBaseURLString(baseURL.Query(), iType)
 			result.Search = &s
 		}
 
 		if init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Pathname == nil && init.Search == nil && init.Hash == nil {
-			h := processBaseURLString(baseURL.EscapedFragment(), iType)
+			h := processBaseURLString(baseURL.Fragment(), iType)
 			result.Hash = &h
 		}
 	}
@@ -417,11 +505,6 @@ func (init *urlPatternInit) process(iType string, protocol, username, password, 
 		result.Password = &p
 	}
 
-	if init.Hostname != nil {
-		h := processHostnameForInit(*init.Hostname, iType)
-		result.Hostname = &h
-	}
-
 	var proto string
 	if result.Protocol == nil {
 		proto = ""
@@ -429,32 +512,61 @@ func (init *urlPatternInit) process(iType string, protocol, username, password, 
 		proto = *result.Protocol
 	}
 
-	if init.Port != nil {
+	if init.Hostname != nil {
+		h, err := processHostnameForInit(*init.Hostname, proto, iType)
+		if err != nil {
+			return nil, err
+		}
 
-		p := processPortForInit(*init.Port, proto, iType)
+		result.Hostname = &h
+	}
+
+	if init.Port != nil {
+		p, err := processPortForInit(*init.Port, proto, iType)
+		if err != nil {
+			return nil, err
+		}
+
 		result.Port = &p
 	}
 
 	if init.Pathname != nil {
 		result.Pathname = init.Pathname
 
-		if baseURL != nil && baseURL.Opaque != "" && !isAbsolutePathname(*result.Pathname, iType) {
-			baseURLPath := processBaseURLString(baseURL.Opaque, iType)
-			p := strings.TrimSuffix(baseURLPath, "/") + *result.Pathname
-			result.Pathname = &p
+		// TODO: according to the spec, we should check that he path is opaque, but it's illogical and breaks the tests
+		if baseURL != nil && !baseURL.OpaquePath() && !isAbsolutePathname(*result.Pathname, iType) {
+			baseURLPath := processBaseURLString(baseURL.Pathname(), iType)
+
+			slashIndex := strings.LastIndex(baseURLPath, "/")
+			if slashIndex != -1 {
+				newPathname := baseURLPath[0:slashIndex+1] + *result.Pathname
+				result.Pathname = &newPathname
+			}
 		}
 
-		p := processPathnameForInit(*result.Pathname, proto, iType)
+		p, err := processPathnameForInit(*result.Pathname, proto, iType)
+		if err != nil {
+			return nil, err
+		}
+
 		result.Pathname = &p
 	}
 
 	if init.Search != nil {
-		s := processSearchForInit(*init.Search, iType)
+		s, err := processSearchForInit(*init.Search, iType)
+		if err != nil {
+			return nil, err
+		}
+
 		result.Search = &s
 	}
 
 	if init.Hash != nil {
-		h := processHashForInit(*init.Hash, iType)
+		h, err := processHashForInit(*init.Hash, iType)
+		if err != nil {
+			return nil, err
+		}
+
 		result.Hash = &h
 	}
 
@@ -500,74 +612,72 @@ func processPasswordForInit(value, uType string) (string, error) {
 }
 
 // https://urlpattern.spec.whatwg.org/#process-hostname-for-init
-func processHostnameForInit(value, uType string) string {
+func processHostnameForInit(value, protocolValue, uType string) (string, error) {
 	if uType == "pattern" {
-		return value
-	}
-
-	result, _ := canonicalizeHostname(value)
-
-	return result
-}
-
-// https://urlpattern.spec.whatwg.org/#process-port-for-init
-func processPortForInit(port, protocol, pType string) string {
-	result, _ := canonicalizePort(port, protocol)
-
-	return result
-}
-
-// https://urlpattern.spec.whatwg.org/#process-pathname-for-init
-func processPathnameForInit(pathnameValue, protocolValue, ptype string) string {
-	if ptype == "pattern" {
-		return pathnameValue
+		return value, nil
 	}
 
 	if protocolValue == "" {
-		result, _ := canonicalizePathname(pathnameValue)
+		return canonicalizeDomainName(value)
+	}
 
-		return result
+	for _, s := range specialSchemeList {
+		if protocolValue == s {
+			return canonicalizeDomainName(value)
+		}
+	}
+
+	return canonicalizeHostname(value, protocolValue)
+}
+
+// https://urlpattern.spec.whatwg.org/#process-port-for-init
+func processPortForInit(portValue, protocolValue, pType string) (string, error) {
+	if pType == "pattern" {
+		return portValue, nil
+	}
+
+	return canonicalizePort(portValue, protocolValue)
+}
+
+// https://urlpattern.spec.whatwg.org/#process-pathname-for-init
+func processPathnameForInit(pathnameValue, protocolValue, ptype string) (string, error) {
+	if ptype == "pattern" {
+		return pathnameValue, nil
+	}
+
+	if protocolValue == "" {
+		return canonicalizePathname(pathnameValue)
 	}
 
 	for _, ss := range specialSchemeList {
-		if protocolValue != ss {
-			continue
+		if protocolValue == ss {
+			return canonicalizePathname(pathnameValue)
 		}
-
-		result, _ := canonicalizePathname(pathnameValue)
-
-		return result
 	}
 
-	result, _ := canonicalizeOpaquePathname(pathnameValue)
-
-	return result
+	return canonicalizeOpaquePathname(pathnameValue)
 }
 
 // https://urlpattern.spec.whatwg.org/#process-search-for-init
-func processSearchForInit(value, sType string) string {
+func processSearchForInit(value, sType string) (string, error) {
 	strippedValue := strings.TrimPrefix(value, "?")
 
 	if sType == "pattern" {
-		return strippedValue
+		return strippedValue, nil
 	}
 
-	result, _ := canonicalizeSearch(strippedValue)
-
-	return result
+	return canonicalizeSearch(strippedValue)
 }
 
 // https://urlpattern.spec.whatwg.org/#process-hash-for-init
-func processHashForInit(value, hType string) string {
+func processHashForInit(value, hType string) (string, error) {
 	strippedValue := strings.TrimPrefix(value, "#")
 
 	if hType == "pattern" {
-		return strippedValue
+		return strippedValue, nil
 	}
 
-	result, _ := canonicalizeHash(value)
-
-	return result
+	return canonicalizeHash(value)
 }
 
 // https://urlpattern.spec.whatwg.org/#is-an-absolute-pathname

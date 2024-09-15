@@ -3,10 +3,12 @@ package urlpattern
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/dunglas/whatwg-url/canonicalizer"
+	"github.com/dunglas/whatwg-url/url"
 )
 
 // https://urlpattern.spec.whatwg.org/#full-wildcard-regexp-value
@@ -17,7 +19,6 @@ const fullWildcardRegexpValue = ".*"
 // Let's just replace values for protocols in specialSchemeList for now.
 // This list could be completed using https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
 var DefaultPorts = map[string]string{
-	"file":  "",
 	"http":  "80",
 	"https": "443",
 	"ws":    "80",
@@ -25,12 +26,16 @@ var DefaultPorts = map[string]string{
 	"ftp":   "21",
 }
 
+var urlParser = url.NewParser()
+var hostnameParser = canonicalizer.New(url.WithFailOnValidationError(), canonicalizer.WithDefaultScheme("http"))
+
 var (
-	NonEmptySuffixError    = errors.New("suffix must be the empty string")
-	BadParserIndexError    = errors.New("parser's index must be less than parser's token list size")
-	DuplicatePartNameError = errors.New("duplicate name")
-	RequiredTokenError     = errors.New("missing required token")
-	InvalidIPv6Hostname    = errors.New("invalid IPv6 hostname")
+	NonEmptySuffixError      = errors.New("suffix must be the empty string")
+	BadParserIndexError      = errors.New("parser's index must be less than parser's token list size")
+	DuplicatePartNameError   = errors.New("duplicate name")
+	RequiredTokenError       = errors.New("missing required token")
+	InvalidIPv6HostnameError = errors.New("invalid IPv6 hostname")
+	InvalidPortError         = errors.New("invalid port")
 )
 
 // https://urlpattern.spec.whatwg.org/#encoding-callback
@@ -153,7 +158,7 @@ func parsePatternString(input string, options options, encodingCallback encoding
 		}
 
 		if _, err := p.consumeRequiredToken(tokenEnd); err != nil {
-			return nil, fmt.Errorf("missing end token: %w", &err)
+			return nil, fmt.Errorf("missing end token: %w", err)
 		}
 	}
 
@@ -387,12 +392,12 @@ func canonicalizeProtocol(value string) (string, error) {
 		return value, nil
 	}
 
-	u, err := url.Parse(value + "://dummy.test")
+	dummyURL, err := urlParser.Parse(value + "://dummy.test")
 	if err != nil {
 		return "", err
 	}
 
-	return u.Scheme, nil
+	return dummyURL.Scheme(), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-username
@@ -401,12 +406,7 @@ func canonicalizeUsername(value string) (string, error) {
 		return value, nil
 	}
 
-	u, err := url.Parse("https://" + value + "@dummy.test")
-	if err != nil {
-		return "", err
-	}
-
-	return u.User.Username(), nil
+	return urlParser.PercentEncodeString(value, url.UserInfoPercentEncodeSet), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-password
@@ -415,25 +415,50 @@ func canonicalizePassword(value string) (string, error) {
 		return value, nil
 	}
 
-	u, err := url.Parse("https://foo:" + value + "@dummy.test")
+	return urlParser.PercentEncodeString(value, url.UserInfoPercentEncodeSet), nil
+}
+
+// https://urlpattern.spec.whatwg.org/#canonicalize-a-hostname
+// https://github.com/whatwg/urlpattern/issues/220#issuecomment-2074613501
+func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
+	if hostnameValue == "" {
+		return hostnameValue, nil
+	}
+
+	// Dirty workaround for https://github.com/whatwg/urlpattern/issues/206
+	if hostnameValue[:1] != "[" {
+		for _, c := range hostnameValue {
+			if c == '/' || c == '?' || c == '#' || c == ':' || c == '\\' {
+				return "", errors.New("invalid hostname")
+			}
+		}
+	}
+
+	var (
+		u   *url.Url
+		err error
+	)
+
+	if protocolValue == "" {
+		u = hostnameParser.NewUrl()
+	} else {
+		u, err = hostnameParser.Parse(protocolValue + "://dummy.test")
+		if err != nil {
+			return "", err
+		}
+	}
+
+	u, err = hostnameParser.BasicParser(hostnameValue, nil, u, url.StateHostname)
 	if err != nil {
 		return "", err
 	}
 
-	p, _ := u.User.Password()
-
-	return p, nil
+	return u.Hostname(), nil
 }
 
-// https://urlpattern.spec.whatwg.org/#canonicalize-a-hostname
-func canonicalizeHostname(value string) (string, error) {
-	if value == "" {
-		return value, nil
-	}
-
-	u := url.URL{Host: value}
-
-	return u.Hostname(), nil
+// https://github.com/whatwg/urlpattern/issues/220#issuecomment-2074613501
+func canonicalizeDomainName(value string) (string, error) {
+	return canonicalizeHostname(value, "https")
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-port
@@ -442,11 +467,53 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 		return portValue, nil
 	}
 
-	if _, ok := DefaultPorts[protocolValue]; ok {
+	var (
+		u   *url.Url
+		err error
+	)
+
+	if protocolValue == "" {
+		u = hostnameParser.NewUrl()
+	} else {
+		u, err = hostnameParser.Parse(protocolValue + "://dummy.test")
+		if err != nil {
+			return "", err
+		}
+	}
+
+	u, err = hostnameParser.BasicParser(portValue, nil, u, url.StatePort)
+	if err != nil {
+		return "", err
+	}
+
+	p := u.Port()
+
+	// This looks like a bug in the spec ("80 " should be considered valid), but there is a test covering this
+	// Another dirty workaround
+	if p != portValue {
+		if dp, ok := DefaultPorts[protocolValue]; ok && portValue == dp {
+			return p, nil
+		}
+
+		return "", InvalidPortError
+	}
+
+	return p, nil
+
+	// TODO: old code, remove me
+	/*if _, ok := DefaultPorts[protocolValue]; ok {
 		return "", nil
 	}
 
-	return portValue, nil
+	p, err := strconv.Atoi(portValue)
+	if err != nil {
+		return "", err
+	}
+	if p > 65535 {
+		return "", PortOutOfRangeError
+	}
+
+	return portValue, nil*/
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-pathname
@@ -465,8 +532,13 @@ func canonicalizePathname(value string) (string, error) {
 
 	modifiedValue.WriteString(value)
 
-	u := url.URL{RawPath: modifiedValue.String()}
-	result := u.EscapedPath()
+	dummyURL := urlParser.NewUrl()
+	u, err := urlParser.BasicParser(modifiedValue.String(), nil, dummyURL, url.StatePathStart)
+	if err != nil {
+		return "", err
+	}
+
+	result := u.Pathname()
 
 	if !leadingSlash {
 		result = result[2:]
@@ -477,13 +549,35 @@ func canonicalizePathname(value string) (string, error) {
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname
 func canonicalizeOpaquePathname(value string) (string, error) {
-	return value, nil
+	if value == "" {
+		return value, nil
+	}
+
+	var err error
+	dummyURL := urlParser.NewUrl()
+
+	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateOpaquePath)
+	if err != nil {
+		return "", err
+	}
+
+	return u.Pathname(), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-search
 func canonicalizeSearch(value string) (string, error) {
-	u := url.URL{RawQuery: value}
-	return u.Query().Encode(), nil
+	if value == "" {
+		return value, nil
+	}
+
+	dummyURL := urlParser.NewUrl()
+
+	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateQuery)
+	if err != nil {
+		return "", err
+	}
+
+	return u.Query(), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-hash
@@ -492,9 +586,13 @@ func canonicalizeHash(value string) (string, error) {
 		return value, nil
 	}
 
-	u := url.URL{RawFragment: value}
+	dummyURL := urlParser.NewUrl()
+	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateFragment)
+	if err != nil {
+		return "", nil
+	}
 
-	return u.EscapedFragment(), nil
+	return u.Fragment(), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-an-ipv6-hostname
@@ -503,7 +601,7 @@ func canonicalizeIPv6Hostname(value string) (string, error) {
 
 	for _, c := range value {
 		if c != '[' && c != ']' && c != ':' && !unicode.Is(unicode.ASCII_Hex_Digit, c) {
-			return "", InvalidIPv6Hostname
+			return "", InvalidIPv6HostnameError
 		}
 
 		result.WriteRune(unicode.ToLower(c))
@@ -511,5 +609,3 @@ func canonicalizeIPv6Hostname(value string) (string, error) {
 
 	return result.String(), nil
 }
-
-// If needed: https://github.com/nlnwa/whatwg-url

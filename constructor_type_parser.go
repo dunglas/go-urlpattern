@@ -13,7 +13,7 @@ type state uint8
 type constructorTypeParser struct {
 	input                         utf8string.String
 	tokenList                     []token
-	result                        urlPatternInit
+	result                        URLPatternInit
 	componentStart                int
 	tokenIndex                    int
 	tokenIncrement                int
@@ -44,14 +44,14 @@ func newConstructorTypeParser(input string, tokenList []token) constructorTypePa
 	return constructorTypeParser{
 		input:          *utf8string.NewString(input),
 		tokenList:      tokenList,
-		result:         urlPatternInit{},
+		result:         URLPatternInit{},
 		tokenIncrement: 1,
 		state:          stateInit,
 	}
 }
 
 // https://urlpattern.spec.whatwg.org/#constructor-string-parsing
-func parseConstructorString(input string) (*urlPatternInit, error) {
+func parseConstructorString(input string) (*URLPatternInit, error) {
 	tl, err := tokenize(input, tokenizePolicyLenient)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,10 @@ func parseConstructorString(input string) (*urlPatternInit, error) {
 			}
 		case stateProtocol:
 			if p.isProtocolSuffix() {
-				p.computeProtocolMatchesSpecialSchemeFlag()
+				if err := p.computeProtocolMatchesSpecialSchemeFlag(); err != nil {
+					return nil, err
+				}
+
 				nextState := statePathname
 				skip := 1
 
@@ -204,7 +207,10 @@ func parseConstructorString(input string) (*urlPatternInit, error) {
 	}
 
 	// If parser’s result contains "hostname" and not "port", then set parser’s result["port"] to the empty string.
-	// not necessary because of Go's zero values
+	if p.result.Hostname != nil && p.result.Port == nil {
+		es := ""
+		p.result.Port = &es
+	}
 
 	return &p.result, nil
 }
@@ -287,29 +293,61 @@ func (p *constructorTypeParser) getSafeToken(index int) token {
 		return p.tokenList[index]
 	}
 
+	// Assert: parser's token list's size is greater than or equal to 1.
+
 	return p.tokenList[len-1]
 }
 
 // https://urlpattern.spec.whatwg.org/#change-state
 func (p *constructorTypeParser) changeState(newState state, skip int) {
+	v := p.makeComponentString()
+
 	// ignore sInit, authority and done
 	switch p.state {
 	case stateProtocol:
-		p.result.Protocol = p.makeComponentString()
+		p.result.Protocol = &v
 	case stateUsername:
-		p.result.Username = p.makeComponentString()
+		p.result.Username = &v
 	case statePassword:
-		p.result.Password = p.makeComponentString()
+		p.result.Password = &v
 	case stateHostname:
-		p.result.Hostname = p.makeComponentString()
+		p.result.Hostname = &v
 	case statePort:
-		p.result.Port = p.makeComponentString()
+		p.result.Port = &v
 	case statePathname:
-		p.result.Pathname = p.makeComponentString()
+		p.result.Pathname = &v
 	case stateSearch:
-		p.result.Search = p.makeComponentString()
+		p.result.Search = &v
 	case stateHash:
-		p.result.Hash = p.makeComponentString()
+		p.result.Hash = &v
+	}
+
+	if p.state != stateInit && newState != stateDone {
+		es := ""
+
+		// If parser’s state is "protocol", "authority", "username", or "password"; new state is "port", "pathname", "search", or "hash"; and parser’s result["hostname"] does not exist, then set parser’s result["hostname"] to the empty string.
+		if p.result.Hostname == nil &&
+			(p.state == stateProtocol || p.state == sateAuthority || p.state == stateUsername || p.state == statePassword) &&
+			(newState == statePort || newState == statePathname || newState == stateSearch || newState == stateHash) {
+			p.result.Hostname = &es
+		}
+
+		if p.result.Pathname == nil &&
+			(p.state == stateProtocol || p.state == sateAuthority || p.state == stateUsername || p.state == statePassword || p.state == stateHostname || p.state == statePort) &&
+			(newState == stateSearch || newState == stateHash) {
+			if p.protocolMatchesASpecialScheme {
+				sl := "/"
+				p.result.Pathname = &sl
+			} else {
+				p.result.Pathname = &es
+			}
+		}
+
+		if p.result.Search == nil &&
+			(p.state == stateProtocol || p.state == sateAuthority || p.state == stateUsername || p.state == statePassword || p.state == stateHostname || p.state == statePort || p.state == statePathname) &&
+			(newState == stateHash) {
+			p.result.Search = &es
+		}
 	}
 
 	p.state = newState
@@ -399,7 +437,7 @@ func compileComponent(input string, encodencodingCallback encodingCallback, opti
 	// the v flag doesn't exist and is useless in Go
 	if options.ignoreCase {
 		// TODO: do this in generateRegularExpressionAndNameList (micro-optim)
-		regularExpressionString = "(i)" + regularExpressionString
+		regularExpressionString = "(?i)" + regularExpressionString
 	}
 
 	regularExpression, err := regexp.Compile(regularExpressionString)

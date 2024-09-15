@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+    - name: Lint Go Code
+      uses: golangci/golangci-lint-action@v6
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['stable']
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Test
+      run: go test -race ${{ matrix.go-version == 'stable' && '-covermode atomic -coverprofile=profile.cov' || ''}}
+    - name: Upload coverage results
+      if: matrix.go-version == 'stable'
+      uses: shogo82148/actions-goveralls@v1
+      with:
+        path-to-profile: profile.cov

@@ -101,40 +101,40 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 			depth := 1
 			regexpPosition := t.nextIndex
 			regexpStart := regexpPosition
-			error := false
+			err := false
 
 		Loop:
 			for regexpPosition < len {
 				t.seekAndGetNextCodePoint(regexpPosition)
 				if !isASCII(t.codePoint) ||
 					(regexpPosition == regexpStart && t.codePoint == '?') {
-					if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-						return nil, err
+					if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+						return nil, e
 					}
 
-					error = true
+					err = true
 					break
 				}
 
 				switch t.codePoint {
 				case '\\':
 					if regexpPosition == len-1 {
-						if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-							return nil, err
+						if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+							return nil, e
 						}
 
-						error = true
+						err = true
 						break Loop
 					}
 
 					t.getNextCodePoint()
 
 					if !isASCII(t.codePoint) {
-						if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-							return nil, err
+						if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+							return nil, e
 						}
 
-						error = true
+						err = true
 						break Loop
 					}
 
@@ -153,11 +153,11 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 					depth++
 
 					if regexpPosition == len-1 {
-						if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-							return nil, err
+						if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+							return nil, e
 						}
 
-						error = true
+						err = true
 						break Loop
 					}
 
@@ -165,11 +165,11 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 					t.getNextCodePoint()
 
 					if t.codePoint != '?' {
-						if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-							return nil, err
+						if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+							return nil, e
 						}
 
-						error = true
+						err = true
 						break Loop
 					}
 
@@ -179,13 +179,13 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 				regexpPosition = t.nextIndex
 			}
 
-			if error {
+			if err {
 				continue
 			}
 
 			if depth != 0 {
-				if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-					return nil, err
+				if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+					return nil, e
 				}
 
 				continue
@@ -193,8 +193,8 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 
 			regexpLength := regexpPosition - regexpStart - 1
 			if regexpLength == 0 {
-				if err := t.processTokenizingError(regexpStart, t.index); err != nil {
-					return nil, err
+				if e := t.processTokenizingError(regexpStart, t.index); e != nil {
+					return nil, e
 				}
 
 				continue
@@ -203,7 +203,6 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 			t.addToken(tokenRegexp, regexpPosition, regexpStart, regexpLength)
 
 		default:
-
 			t.addTokenWithDefaultPositionAndLength(tokenChar)
 		}
 	}
@@ -291,14 +290,4 @@ func isIdentifierPart(codePoint rune) bool {
 
 func isASCII(codePoint rune) bool {
 	return codePoint >= 0 && codePoint <= unicode.MaxASCII
-}
-
-func isASCIIString(input string) bool {
-	for i := 0; i < len(input); i++ {
-		if input[i] > unicode.MaxASCII {
-			return false
-		}
-	}
-
-	return true
 }

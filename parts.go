@@ -53,7 +53,7 @@ type partList []part
 // https://urlpattern.spec.whatwg.org/#generate-a-regular-expression-and-name-list
 func (pl partList) generateRegularExpressionAndNameList(options options) (string, []string, error) {
 	var result strings.Builder
-	nameList := make([]string, len(pl))
+	nameList := make([]string, 0, len(pl))
 
 	result.WriteByte('^')
 
@@ -69,9 +69,9 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 				if modifierToString := convertModifierToString(p.modifier); modifierToString != 0 {
 					result.WriteByte(modifierToString)
 				}
-
-				continue
 			}
+
+			continue
 		}
 
 		// Assert: part's name is not the empty string.
@@ -178,6 +178,8 @@ func (pl partList) generatePatternString(options options) (string, error) {
 		}
 		if index < maxIndex {
 			nextPart = &pl[index+1]
+		} else {
+			nextPart = nil
 		}
 
 		if part.pType == partFixedText {
@@ -197,7 +199,7 @@ func (pl partList) generatePatternString(options options) (string, error) {
 			continue
 		}
 
-		customName := unicode.IsDigit([]rune(part.name)[0])
+		customName := !unicode.IsDigit([]rune(part.name)[0])
 		needGrouping := part.suffix != "" || (part.prefix != "" && part.prefix != string(options.prefixCodePoint))
 
 		if !needGrouping &&
@@ -247,14 +249,16 @@ func (pl partList) generatePatternString(options options) (string, error) {
 			result.WriteByte(')')
 
 		case partSegmentWildcard:
-			result.WriteByte('(')
-			result.WriteString(generateSegmentWildcardRegexp(options))
-			result.WriteByte(')')
+			if !customName {
+				result.WriteByte('(')
+				result.WriteString(generateSegmentWildcardRegexp(options))
+				result.WriteByte(')')
+			}
 
 		case partFullWildcard:
 			if !customName && (previousPart == nil ||
 				previousPart.pType == partFixedText ||
-				previousPart.modifier == partModifierNone ||
+				previousPart.modifier != partModifierNone ||
 				needGrouping ||
 				part.prefix != "") {
 				result.WriteByte('*')
@@ -278,7 +282,9 @@ func (pl partList) generatePatternString(options options) (string, error) {
 			result.WriteByte('}')
 		}
 
-		result.WriteByte(convertModifierToString(part.modifier))
+		if modifierToString := convertModifierToString(part.modifier); modifierToString != 0 {
+			result.WriteByte(modifierToString)
+		}
 	}
 
 	return result.String(), nil
