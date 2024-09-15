@@ -110,25 +110,29 @@ func (c *component) protocolComponentMatchesSpecialScheme() bool {
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-create
-func New(input string, baseURL *string, options Options) (*URLPattern, error) {
+func New(input string, baseURL string, options *Options) (*URLPattern, error) {
 	init, err := parseConstructorString(input)
 	if err != nil {
 		return nil, err
 	}
 
-	if baseURL == nil && init.Protocol == nil {
+	if baseURL == "" && init.Protocol == nil {
 		return nil, NoBaseURLError
 	}
 
-	if baseURL != nil {
-		init.BaseURL = baseURL
+	if baseURL != "" {
+		init.BaseURL = &baseURL
 	}
 
 	return init.New(options)
 }
 
 // https://urlpattern.spec.whatwg.org/#url-pattern-create
-func (init *URLPatternInit) New(opt Options) (*URLPattern, error) {
+func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
+	if opt == nil {
+		opt = &Options{}
+	}
+
 	processedInit, err := init.process("pattern", nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err

@@ -334,7 +334,6 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 }
 
 // https://urlpattern.spec.whatwg.org/#is-a-duplicate-name
-// TODO: use a map to improve performance?
 func (p *patternParser) isDuplicateName(name string) bool {
 	for _, part := range p.partList {
 		if part.name == name {
@@ -499,21 +498,6 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 	}
 
 	return p, nil
-
-	// TODO: old code, remove me
-	/*if _, ok := DefaultPorts[protocolValue]; ok {
-		return "", nil
-	}
-
-	p, err := strconv.Atoi(portValue)
-	if err != nil {
-		return "", err
-	}
-	if p > 65535 {
-		return "", PortOutOfRangeError
-	}
-
-	return portValue, nil*/
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-pathname

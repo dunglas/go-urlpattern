@@ -1,9 +1,15 @@
 # Go URL Pattern
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/dunglas/go-urlpattern.svg)](https://pkg.go.dev/github.com/dunglas/go-urlpattern)
+
 A spec-compliant implementation of [the WHATWG URL Pattern Living Standard](https://urlpattern.spec.whatwg.org/)
 written in [Go](https://go.dev).
 
 Tested with [web-platform-test](https://web-platform-tests.org) test suite.
+
+## Docs
+
+[Read the docs on Go Packages](https://pkg.go.dev/github.com/dunglas/go-urlpattern).
 
 ## Limitations
 

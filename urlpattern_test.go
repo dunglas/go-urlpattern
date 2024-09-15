@@ -131,8 +131,8 @@ func TestURLPattern(t *testing.T) {
 }
 
 func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
-	var baseURL *string
-	var options urlpattern.Options
+	var baseURL string
+	options := &urlpattern.Options{}
 
 	switch len(entry.Pattern) {
 	case 0:
@@ -145,8 +145,7 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 			options.IgnoreCase = true
 
 		case string:
-			bu := entry.Pattern[1].(string)
-			baseURL = &bu
+			baseURL = entry.Pattern[1].(string)
 
 		default:
 			return nil, errors.New("invalid constructor parameter #1")
@@ -160,7 +159,7 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 			return nil, errors.New("invalid constructor parameter #2")
 		}
 
-		baseURL = &bu
+		baseURL = bu
 	}
 
 	switch entry.Pattern[0].(type) {
@@ -168,7 +167,7 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 		return urlpattern.New(entry.Pattern[0].(string), baseURL, options)
 
 	case map[string]interface{}:
-		if baseURL != nil {
+		if baseURL != "" {
 			return nil, errors.New("Invalid second argument baseURL provided with a URLPatternInit input. Use the URLPatternInit.baseURL property instead.")
 		}
 
@@ -208,7 +207,7 @@ func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
 
 			for k, v := range mv["groups"].(map[string]interface{}) {
 				if v == nil {
-					// TODO: this should be null, but it's currently not implemented
+					// TODO: this should probably be nil, but it's currently not implemented
 					component.Groups[k] = ""
 					continue
 				}
@@ -425,17 +424,18 @@ func assertExpectedObjectProp(t *testing.T, key string, entry Entry, value strin
 	}
 }
 
-/*
-func assertSameResult(t *testing.T, expected *urlpattern.URLPatternResult, value *urlpattern.URLPatternResult) {
-
-}
-
-func assertSameResultComponent(t *testing.T, entry Entry, component string, expected *urlpattern.URLPatternComponentResult, value *urlpattern.URLPatternComponentResult) {
-	if expected.Input != value.Input {
-		t.Logf("want %q; got %q (%s: %#v)", expected.Input, value.Input, component, entry)
+func Example() {
+	pattern, err := urlpattern.New("/books/:id", "https://example.com", nil)
+	if err != nil {
+		panic(err)
 	}
 
-	if len(expected.Groups) != len(value.Groups)
+	fmt.Printf("%t\n", pattern.Test("https://example.com/books/123", ""))
+	fmt.Printf("%t\n", pattern.Test("https://example.com/authors/123", ""))
 
+	fmt.Printf("%v", pattern.Exec("123", "https://example.com/books/").Pathname.Groups)
+
+	// Output: true
+	// false
+	// map[id:123]
 }
-*/
