@@ -55,6 +55,11 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 	var result strings.Builder
 	nameList := make([]string, 0, len(pl))
 
+	// the v flag doesn't exist in Go
+	if options.ignoreCase {
+		result.WriteString("(?i)")
+	}
+
 	result.WriteByte('^')
 
 	for _, p := range pl {

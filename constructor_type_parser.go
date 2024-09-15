@@ -434,12 +434,6 @@ func compileComponent(input string, encodencodingCallback encodingCallback, opti
 		return nil, err
 	}
 
-	// the v flag doesn't exist and is useless in Go
-	if options.ignoreCase {
-		// TODO: do this in generateRegularExpressionAndNameList (micro-optim)
-		regularExpressionString = "(?i)" + regularExpressionString
-	}
-
 	regularExpression, err := regexp.Compile(regularExpressionString)
 	if err != nil {
 		return nil, err
