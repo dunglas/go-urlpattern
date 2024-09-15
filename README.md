@@ -1,6 +1,7 @@
 # Go URL Pattern
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/dunglas/go-urlpattern.svg)](https://pkg.go.dev/github.com/dunglas/go-urlpattern)
+[![Coverage Status](https://coveralls.io/repos/github/dunglas/go-urlpattern/badge.svg)](https://coveralls.io/github/dunglas/go-urlpattern)
 
 A spec-compliant implementation of [the WHATWG URL Pattern Living Standard](https://urlpattern.spec.whatwg.org/)
 written in [Go](https://go.dev).
