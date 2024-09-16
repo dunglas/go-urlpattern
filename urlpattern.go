@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dunglas/whatwg-url/url"
+	"github.com/nlnwa/whatwg-url/url"
 )
 
 var (

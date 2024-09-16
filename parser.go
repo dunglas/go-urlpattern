@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/dunglas/whatwg-url/canonicalizer"
-	"github.com/dunglas/whatwg-url/url"
+	"github.com/nlnwa/whatwg-url/canonicalizer"
+	"github.com/nlnwa/whatwg-url/url"
 )
 
 // https://urlpattern.spec.whatwg.org/#full-wildcard-regexp-value
