@@ -60,7 +60,7 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 		result.WriteString("(?i)")
 	}
 
-	result.WriteByte('^')
+	result.WriteString("\\A(?:")
 
 	for _, p := range pl {
 		if p.pType == partFixedText {
@@ -165,7 +165,7 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 		}
 	}
 
-	result.WriteByte('$')
+	result.WriteString(")\\z")
 
 	return result.String(), nameList, nil
 }
