@@ -51,7 +51,7 @@ func tokenize(input string, policy tokenizePolicy) ([]token, error) {
 
 		case '\\':
 			if t.index == len-1 {
-				if err := t.processTokenizingError(t.nextIndex, t.index); err == nil {
+				if err := t.processTokenizingError(t.nextIndex, t.index); err != nil {
 					return nil, err
 				}
 
