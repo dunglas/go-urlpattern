@@ -170,6 +170,7 @@ type patternParser struct {
 	encodingCallback      encodingCallback
 	segmentWildcardRegexp string
 	partList              partList
+	seenNames             map[string]struct{}
 	pendingFixedValue     string
 	index                 int
 	nextNumericName       float64
@@ -313,7 +314,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 		p.nextNumericName++
 	}
 
-	if p.isDuplicateName(name) {
+	if _, seen := p.seenNames[name]; seen {
 		return DuplicatePartNameError
 	}
 
@@ -327,21 +328,15 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 		return err
 	}
 
+	if p.seenNames == nil {
+		p.seenNames = make(map[string]struct{})
+	}
+	p.seenNames[name] = struct{}{}
+
 	part := part{pType: pType, value: regexpValue, modifier: modifier, name: name, prefix: encodedPrefix, suffix: encodedSuffix}
 	p.partList = append(p.partList, part)
 
 	return nil
-}
-
-// https://urlpattern.spec.whatwg.org/#is-a-duplicate-name
-func (p *patternParser) isDuplicateName(name string) bool {
-	for _, part := range p.partList {
-		if part.name == name {
-			return true
-		}
-	}
-
-	return false
 }
 
 // https://urlpattern.spec.whatwg.org/#consume-text
