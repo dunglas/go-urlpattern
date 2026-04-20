@@ -681,7 +681,7 @@ func processHashForInit(value, hType string) (string, error) {
 		return strippedValue, nil
 	}
 
-	return canonicalizeHash(value)
+	return canonicalizeHash(strippedValue)
 }
 
 // https://urlpattern.spec.whatwg.org/#is-an-absolute-pathname
