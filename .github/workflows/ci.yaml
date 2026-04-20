@@ -4,17 +4,23 @@ on:
   push:
   pull_request:
 
+env:
+  # Pin to the toolchain set up by actions/setup-go so Go does not silently
+  # download a newer one based on the go.mod toolchain directive — that
+  # would defeat the oldstable matrix entry.
+  GOTOOLCHAIN: local
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
     - name: Lint Go Code
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9
 
   test:
     name: Test
@@ -25,9 +31,9 @@ jobs:
         go-version: ['oldstable', 'stable']
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
     - name: Test
