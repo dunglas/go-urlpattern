@@ -17,7 +17,13 @@ var (
 )
 
 // https://url.spec.whatwg.org/#special-scheme
-var specialSchemeList = []string{"ftp", "http", "https", "ws", "wss"}
+var specialSchemeSet = map[string]struct{}{
+	"ftp":   {},
+	"http":  {},
+	"https": {},
+	"ws":    {},
+	"wss":   {},
+}
 
 type URLPatternResult struct {
 	Inputs     []string
@@ -100,7 +106,7 @@ type component struct {
 
 // https://urlpattern.spec.whatwg.org/#protocol-component-matches-a-special-scheme
 func (c *component) protocolComponentMatchesSpecialScheme() bool {
-	for _, scheme := range specialSchemeList {
+	for scheme := range specialSchemeSet {
 		if c.regularExpression.MatchString(scheme) {
 			return true
 		}
@@ -165,10 +171,18 @@ func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
 	}
 
 	var emptyString string
-	for _, s := range specialSchemeList {
-		if *processedInit.Protocol == s && *processedInit.Port == DefaultPorts[s] {
+	// Only clear the port when the protocol is a WHATWG special scheme; the
+	// exported DefaultPorts map is user-extendable, so keying off it alone
+	// would quietly apply the behaviour to arbitrary user-added protocols.
+	//
+	// In "pattern" mode processedInit.Protocol is not canonicalized, so
+	// lowercase it for the comparison: the protocol component is compiled
+	// with canonicalizeProtocol (which lowercases), so the effective pattern
+	// is the lowercase form.
+	canonicalProtocol := strings.ToLower(*processedInit.Protocol)
+	if _, isSpecial := specialSchemeSet[canonicalProtocol]; isSpecial {
+		if dp, ok := DefaultPorts[canonicalProtocol]; ok && *processedInit.Port == dp {
 			processedInit.Port = &emptyString
-			break
 		}
 	}
 
@@ -191,13 +205,15 @@ func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
 
 	// If the result running hostname pattern is an IPv6 address given processedInit["hostname"] is true, then set urlPattern’s hostname component to the result of compiling a component given processedInit["hostname"], canonicalize an IPv6 hostname, and hostname options.
 
+	protocolMatchesSpecialScheme := urlPattern.protocol.protocolComponentMatchesSpecialScheme()
+
 	hostnameOptions := options{delimiterCodePoint: '.'}
 	if hostnamePatternIsIPv6Address(*processedInit.Hostname) {
 		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeIPv6Hostname, hostnameOptions)
 		if err != nil {
 			return nil, err
 		}
-	} else if urlPattern.protocol.protocolComponentMatchesSpecialScheme() || *processedInit.Protocol == "*" {
+	} else if protocolMatchesSpecialScheme || *processedInit.Protocol == "*" {
 		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeDomainName, hostnameOptions)
 		if err != nil {
 			return nil, err
@@ -219,7 +235,7 @@ func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
 
 	pathnameOptions := options{'/', '/', false}
 
-	if urlPattern.protocol.protocolComponentMatchesSpecialScheme() {
+	if protocolMatchesSpecialScheme {
 		pathCompileOptions := pathnameOptions
 		pathCompileOptions.ignoreCase = opt.IgnoreCase
 
@@ -629,10 +645,8 @@ func processHostnameForInit(value, protocolValue, uType string) (string, error) 
 		return canonicalizeDomainName(value)
 	}
 
-	for _, s := range specialSchemeList {
-		if protocolValue == s {
-			return canonicalizeDomainName(value)
-		}
+	if _, ok := specialSchemeSet[protocolValue]; ok {
+		return canonicalizeDomainName(value)
 	}
 
 	return canonicalizeHostname(value, protocolValue)
@@ -657,10 +671,8 @@ func processPathnameForInit(pathnameValue, protocolValue, ptype string) (string,
 		return canonicalizePathname(pathnameValue)
 	}
 
-	for _, ss := range specialSchemeList {
-		if protocolValue == ss {
-			return canonicalizePathname(pathnameValue)
-		}
+	if _, ok := specialSchemeSet[protocolValue]; ok {
+		return canonicalizePathname(pathnameValue)
 	}
 
 	return canonicalizeOpaquePathname(pathnameValue)
