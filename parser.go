@@ -314,6 +314,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 		p.nextNumericName++
 	}
 
+	// https://urlpattern.spec.whatwg.org/#is-a-duplicate-name
 	if _, seen := p.seenNames[name]; seen {
 		return DuplicatePartNameError
 	}
