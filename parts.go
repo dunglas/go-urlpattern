@@ -20,10 +20,10 @@ const (
 )
 
 var (
-	EmptyPartNameError    = errors.New("part's name must not be empty string")
-	InvalidModifierError  = errors.New(`part's modifier must be "zero-or-more" or "one-or-more"`)
-	InvalidPrefixOrSuffix = errors.New("part's prefix is not the empty string or part's suffix is not the empty string")
-	InvalidPartNameError  = errors.New("part's name is not the empty string or null")
+	ErrEmptyPartName    = errors.New("part's name must not be empty string")
+	ErrInvalidModifier  = errors.New(`part's modifier must be "zero-or-more" or "one-or-more"`)
+	ErrInvalidPrefixOrSuffix = errors.New("part's prefix is not the empty string or part's suffix is not the empty string")
+	ErrInvalidPartName  = errors.New("part's name is not the empty string or null")
 )
 
 type partModifier uint8
@@ -81,7 +81,7 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 
 		// Assert: part's name is not the empty string.
 		if p.name == "" {
-			return "", nil, EmptyPartNameError
+			return "", nil, ErrEmptyPartName
 		}
 
 		nameList = append(nameList, p.name)
@@ -140,12 +140,12 @@ func (pl partList) generateRegularExpressionAndNameList(options options) (string
 
 		// Assert: part’s modifier is "zero-or-more" or "one-or-more".
 		if p.modifier != partModifierZeroOrMore && p.modifier != partModifierOneOrMore {
-			return "", nil, InvalidModifierError
+			return "", nil, ErrInvalidModifier
 		}
 
 		// Assert: part’s prefix is not the empty string or part’s suffix is not the empty string.
 		if p.prefix == "" && p.suffix == "" {
-			return "", nil, InvalidPrefixOrSuffix
+			return "", nil, ErrInvalidPrefixOrSuffix
 		}
 
 		result.WriteString("(?:")
@@ -233,7 +233,7 @@ func (pl partList) generatePatternString(options options) (string, error) {
 
 		// Assert: part’s name is not the empty string or null.
 		if part.name == "" {
-			return "", InvalidPartNameError
+			return "", ErrInvalidPartName
 		}
 
 		if needGrouping {

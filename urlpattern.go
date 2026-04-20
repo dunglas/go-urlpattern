@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	NoBaseURLError             = errors.New("relative URL and no baseURL provided")
-	UnexpectedEmptyStringError = errors.New("unexpected empty string")
+	ErrNoBaseURL             = errors.New("relative URL and no baseURL provided")
+	ErrUnexpectedEmptyString = errors.New("unexpected empty string")
 )
 
 // https://url.spec.whatwg.org/#special-scheme
@@ -123,7 +123,7 @@ func New(input string, baseURL string, options *Options) (*URLPattern, error) {
 	}
 
 	if baseURL == "" && init.Protocol == nil {
-		return nil, NoBaseURLError
+		return nil, ErrNoBaseURL
 	}
 
 	if baseURL != "" {

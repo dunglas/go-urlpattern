@@ -8,7 +8,7 @@ import (
 	"golang.org/x/exp/utf8string"
 )
 
-var TypeError = errors.New("type error")
+var ErrType = errors.New("type error")
 
 // https://wicg.github.io/urlpattern/#tokenizing
 type tokenizePolicy bool
@@ -241,7 +241,7 @@ func (t *tokenizer) addTokenWithDefaultPositionAndLength(tType tokenType) {
 
 func (t *tokenizer) processTokenizingError(nextPosition, valuePosition int) error {
 	if t.policy == tokenizePolicyStrict {
-		return fmt.Errorf("%w: %#v", TypeError, t)
+		return fmt.Errorf("%w: %#v", ErrType, t)
 	}
 
 	t.addTokenWithDefaultLength(tokenInvalidChar, nextPosition, valuePosition)

@@ -39,12 +39,12 @@ var urlParser = url.NewParser()
 var hostnameParser = canonicalizer.New(canonicalizer.WithDefaultScheme("http"))
 
 var (
-	NonEmptySuffixError      = errors.New("suffix must be the empty string")
-	BadParserIndexError      = errors.New("parser's index must be less than parser's token list size")
-	DuplicatePartNameError   = errors.New("duplicate name")
-	RequiredTokenError       = errors.New("missing required token")
-	InvalidIPv6HostnameError = errors.New("invalid IPv6 hostname")
-	InvalidPortError         = errors.New("invalid port")
+	ErrNonEmptySuffix      = errors.New("suffix must be the empty string")
+	ErrBadParserIndex      = errors.New("parser's index must be less than parser's token list size")
+	ErrDuplicatePartName   = errors.New("duplicate name")
+	ErrRequiredToken       = errors.New("missing required token")
+	ErrInvalidIPv6Hostname = errors.New("invalid IPv6 hostname")
+	ErrInvalidPort         = errors.New("invalid port")
 )
 
 // https://urlpattern.spec.whatwg.org/#encoding-callback
@@ -189,7 +189,7 @@ type patternParser struct {
 func (p *patternParser) tryConsumeToken(tokenType tokenType) (*token, error) {
 	// Assert: parser’s index is less than parser’s token list size.
 	if p.index >= len(p.tokenList) {
-		return nil, BadParserIndexError
+		return nil, ErrBadParserIndex
 	}
 
 	nextToken := p.tokenList[p.index]
@@ -277,7 +277,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 	if nameToken == nil && regexpOrWildcardToken == nil {
 		// Assert: suffix is the empty string.
 		if suffix != "" {
-			return NonEmptySuffixError
+			return ErrNonEmptySuffix
 		}
 
 		if prefix == "" {
@@ -325,7 +325,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 
 	// https://urlpattern.spec.whatwg.org/#is-a-duplicate-name
 	if _, seen := p.seenNames[name]; seen {
-		return DuplicatePartNameError
+		return ErrDuplicatePartName
 	}
 
 	encodedPrefix, err := p.encodingCallback(prefix)
@@ -379,7 +379,7 @@ func (p *patternParser) consumeRequiredToken(tokenType tokenType) (*token, error
 		return nil, err
 	}
 	if result == nil {
-		return nil, RequiredTokenError
+		return nil, ErrRequiredToken
 	}
 
 	return result, nil
@@ -487,7 +487,7 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 		break
 	}
 	if !firstDigit {
-		return "", InvalidPortError
+		return "", ErrInvalidPort
 	}
 
 	scheme := protocolValue
@@ -595,7 +595,7 @@ func canonicalizeIPv6Hostname(value string) (string, error) {
 
 	for _, c := range value {
 		if c != '[' && c != ']' && c != ':' && !unicode.Is(unicode.ASCII_Hex_Digit, c) {
-			return "", InvalidIPv6HostnameError
+			return "", ErrInvalidIPv6Hostname
 		}
 
 		result.WriteRune(unicode.ToLower(c))
