@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['stable']
+        go-version: ['oldstable', 'stable']
     steps:
     - name: Checkout
       uses: actions/checkout@v4
