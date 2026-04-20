@@ -68,15 +68,13 @@ func parseConstructorString(input string) (*URLPatternInit, error) {
 			if p.state == stateInit {
 				p.rewind()
 
-				if p.isHashPrefix() {
+				switch {
+				case p.isHashPrefix():
 					p.changeState(stateHash, 1)
-				} else if p.isSearchPrefix() {
+				case p.isSearchPrefix():
 					p.changeState(stateSearch, 1)
-					//p.result.Hash = ""
-				} else {
+				default:
 					p.changeState(statePathname, 0)
-					//p.result.Hash = ""
-					//p.result.Search = ""
 				}
 
 				p.tokenIndex += p.tokenIncrement
@@ -160,26 +158,28 @@ func parseConstructorString(input string) (*URLPatternInit, error) {
 			}
 
 		case stateHostname:
-			if p.isIPV6Open() {
+			switch {
+			case p.isIPV6Open():
 				p.hostnameIPv6BracketDepth++
-			} else if p.isIPV6Close() {
+			case p.isIPV6Close():
 				p.hostnameIPv6BracketDepth--
-			} else if p.isPortPrefix() && p.hostnameIPv6BracketDepth == 0 {
+			case p.isPortPrefix() && p.hostnameIPv6BracketDepth == 0:
 				p.changeState(statePort, 1)
-			} else if p.isPathnameStart() {
+			case p.isPathnameStart():
 				p.changeState(statePathname, 0)
-			} else if p.isSearchPrefix() {
+			case p.isSearchPrefix():
 				p.changeState(stateSearch, 1)
-			} else if p.isHashPrefix() {
+			case p.isHashPrefix():
 				p.changeState(stateHash, 1)
 			}
 
 		case statePort:
-			if p.isPathnameStart() {
+			switch {
+			case p.isPathnameStart():
 				p.changeState(statePathname, 0)
-			} else if p.isSearchPrefix() {
+			case p.isSearchPrefix():
 				p.changeState(stateSearch, 1)
-			} else if p.isHashPrefix() {
+			case p.isHashPrefix():
 				p.changeState(stateHash, 1)
 			}
 
@@ -351,7 +351,7 @@ func (p *constructorTypeParser) changeState(newState state, skip int) {
 	}
 
 	p.state = newState
-	p.tokenIndex = p.tokenIndex + skip
+	p.tokenIndex += skip
 	p.componentStart = p.tokenIndex
 	p.tokenIncrement = 0
 }
@@ -359,7 +359,7 @@ func (p *constructorTypeParser) changeState(newState state, skip int) {
 // https://urlpattern.spec.whatwg.org/#make-a-component-string
 func (p *constructorTypeParser) makeComponentString() string {
 	token := p.tokenList[p.tokenIndex]
-	componentStartToken := p.getSafeToken(int(p.componentStart))
+	componentStartToken := p.getSafeToken(p.componentStart)
 	componentStartInputIndex := componentStartToken.index
 	endIndex := token.index
 

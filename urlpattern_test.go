@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,12 +19,17 @@ import (
 
 //go:generate curl https://raw.githubusercontent.com/web-platform-tests/wpt/master/urlpattern/resources/urlpatterntestdata.json -o testdata/urlpatterntestdata.json
 
+var (
+	errInvalidPatternParam = errors.New("invalid constructor parameter")
+	errBaseURLWithInit     = errors.New("invalid second argument: baseURL provided with a URLPatternInit input; use URLPatternInit.BaseURL instead")
+)
+
 type Entry struct {
-	Pattern                []interface{} `json:"pattern"`
-	Inputs                 []interface{} `json:"inputs"`
+	Pattern                []any `json:"pattern"`
+	Inputs                 []any `json:"inputs"`
 	ExactlyEmptyComponents []string      `json:"exactly_empty_components"`
-	ExpectedObj            interface{}   `json:"expected_obj"`
-	ExpectedMatch          interface{}   `json:"expected_match"`
+	ExpectedObj            any   `json:"expected_obj"`
+	ExpectedMatch          any   `json:"expected_match"`
 }
 
 func TestURLPattern(t *testing.T) {
@@ -37,7 +44,7 @@ func TestURLPattern(t *testing.T) {
 	}
 
 	for i, entry := range data {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			pattern, err := newPattern(t, &entry)
 
 			if e, _ := entry.ExpectedObj.(string); e == "error" {
@@ -74,7 +81,7 @@ func TestURLPattern(t *testing.T) {
 			testResult, err := callTest(pattern, entry)
 			if err != nil {
 				if len(entry.Inputs) == 1 {
-					if i, ok := entry.Inputs[0].(map[string]interface{}); ok {
+					if i, ok := entry.Inputs[0].(map[string]any); ok {
 						if p, _ := i["protocol"].(string); p == "café" {
 							t.Skip("TODO: check why this fails, probably a bug in the test suite")
 						}
@@ -89,7 +96,7 @@ func TestURLPattern(t *testing.T) {
 
 			if testResult != expectedTestResult {
 				if len(entry.Pattern) > 0 {
-					e, _ := entry.Pattern[0].(map[string]interface{})
+					e, _ := entry.Pattern[0].(map[string]any)
 					if pa := e["pathname"]; pa != nil {
 						p := pa.(string)
 						if strings.Contains(p, "[") && (strings.Contains(p, "--") || strings.Contains(p, "&&")) {
@@ -117,7 +124,7 @@ func TestURLPattern(t *testing.T) {
 				return
 			}
 
-			expectedObj := entry.ExpectedMatch.(map[string]interface{})
+			expectedObj := entry.ExpectedMatch.(map[string]any)
 			if _, ok := expectedObj["inputs"]; !ok {
 				expectedObj["inputs"] = entry.Inputs
 			}
@@ -131,6 +138,8 @@ func TestURLPattern(t *testing.T) {
 }
 
 func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
+	t.Helper()
+
 	var baseURL string
 	options := &urlpattern.Options{}
 
@@ -140,15 +149,15 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 		return i.New(options)
 
 	case 2:
-		switch entry.Pattern[1].(type) {
-		case map[string]interface{}:
+		switch v := entry.Pattern[1].(type) {
+		case map[string]any:
 			options.IgnoreCase = true
 
 		case string:
-			baseURL = entry.Pattern[1].(string)
+			baseURL = v
 
 		default:
-			return nil, errors.New("invalid constructor parameter #1")
+			return nil, errInvalidPatternParam
 		}
 
 	case 3:
@@ -156,25 +165,22 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 
 		bu, ok := entry.Pattern[1].(string)
 		if !ok {
-			return nil, errors.New("invalid constructor parameter #2")
+			return nil, errInvalidPatternParam
 		}
 
 		baseURL = bu
 	}
 
-	switch entry.Pattern[0].(type) {
+	switch v := entry.Pattern[0].(type) {
 	case string:
-		return urlpattern.New(entry.Pattern[0].(string), baseURL, options)
+		return urlpattern.New(v, baseURL, options)
 
-	case map[string]interface{}:
+	case map[string]any:
 		if baseURL != "" {
-			return nil, errors.New("Invalid second argument baseURL provided with a URLPatternInit input. Use the URLPatternInit.baseURL property instead.")
+			return nil, errBaseURLWithInit
 		}
 
-		m := entry.Pattern[0].(map[string]interface{})
-		u := initFromObj(m)
-
-		return u.New(options)
+		return initFromObj(v).New(options)
 	}
 
 	t.Fatalf("invalid entry pattern %#v", entry.Pattern)
@@ -183,12 +189,11 @@ func newPattern(t *testing.T, entry *Entry) (*urlpattern.URLPattern, error) {
 }
 
 func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
-
 	expectedResult := urlpattern.URLPatternResult{}
-	for k, v := range e.ExpectedMatch.(map[string]interface{}) {
+	for k, v := range e.ExpectedMatch.(map[string]any) {
 		if k == "inputs" {
-			for _, initInput := range v.([]interface{}) {
-				if ip, ok := initInput.(map[string]interface{}); ok {
+			for _, initInput := range v.([]any) {
+				if ip, ok := initInput.(map[string]any); ok {
 					expectedResult.InitInputs = append(expectedResult.InitInputs, initFromObj(ip))
 				} else {
 					expectedResult.Inputs = append(expectedResult.Inputs, initInput.(string))
@@ -197,15 +202,15 @@ func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
 
 			continue
 		}
-		mv := v.(map[string]interface{})
+		mv := v.(map[string]any)
 		component := urlpattern.URLPatternComponentResult{}
 		component.Input = mv["input"].(string)
-		len := len(mv["groups"].(map[string]interface{}))
+		len := len(mv["groups"].(map[string]any))
 
 		if len > 0 {
 			component.Groups = make(map[string]string, len)
 
-			for k, v := range mv["groups"].(map[string]interface{}) {
+			for k, v := range mv["groups"].(map[string]any) {
 				if v == nil {
 					// TODO: this should probably be nil, but it's currently not implemented
 					component.Groups[k] = ""
@@ -246,7 +251,7 @@ func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
 	return &expectedResult
 }
 
-func stringOrNil(v interface{}) *string {
+func stringOrNil(v any) *string {
 	if v == nil {
 		return nil
 	}
@@ -271,10 +276,10 @@ func callTest(pattern *urlpattern.URLPattern, entry Entry) (bool, error) {
 	}
 
 	if len(entry.Inputs) > 1 {
-		return false, errors.New("invalid constructor parameter #1")
+		return false, errInvalidPatternParam
 	}
 
-	return pattern.TestInit(initFromObj(entry.Inputs[0].(map[string]interface{}))), nil
+	return pattern.TestInit(initFromObj(entry.Inputs[0].(map[string]any))), nil
 }
 
 func callExec(pattern *urlpattern.URLPattern, entry Entry) (*urlpattern.URLPatternResult, error) {
@@ -292,13 +297,13 @@ func callExec(pattern *urlpattern.URLPattern, entry Entry) (*urlpattern.URLPatte
 	}
 
 	if len(entry.Inputs) > 1 {
-		return nil, errors.New("invalid constructor parameter #1")
+		return nil, errInvalidPatternParam
 	}
 
-	return pattern.ExecInit(initFromObj(entry.Inputs[0].(map[string]interface{}))), nil
+	return pattern.ExecInit(initFromObj(entry.Inputs[0].(map[string]any))), nil
 }
 
-func initFromObj(m map[string]interface{}) *urlpattern.URLPatternInit {
+func initFromObj(m map[string]any) *urlpattern.URLPatternInit {
 	return &urlpattern.URLPatternInit{
 		Protocol: stringOrNil(m["protocol"]),
 		Username: stringOrNil(m["username"]),
@@ -322,17 +327,15 @@ var earlierComponents = map[string][]string{
 
 func buildExpected(entry Entry, component string) *string {
 	if entry.ExpectedObj == nil {
-		for _, c := range entry.ExactlyEmptyComponents {
-			if c == component {
-				es := ""
-				return &es
-			}
+		if slices.Contains(entry.ExactlyEmptyComponents, component) {
+			es := ""
+			return &es
 		}
 
 		if len(entry.Pattern) > 0 {
 			star := "*"
 
-			p, ok := entry.Pattern[0].(map[string]interface{})
+			p, ok := entry.Pattern[0].(map[string]any)
 			if ok {
 				if p[component] != nil {
 					v := p[component].(string)
@@ -383,13 +386,12 @@ func buildExpected(entry Entry, component string) *string {
 
 				return &star
 			}
-
 		}
 
 		return nil
 	}
 
-	o := entry.ExpectedObj.(map[string]interface{})
+	o := entry.ExpectedObj.(map[string]any)
 	e, ok := o[component]
 	if !ok {
 		return nil
@@ -401,6 +403,8 @@ func buildExpected(entry Entry, component string) *string {
 }
 
 func assertExpectedObject(t *testing.T, entry Entry, pattern *urlpattern.URLPattern) {
+	t.Helper()
+
 	assertExpectedObjectProp(t, "protocol", entry, pattern.Protocol())
 	assertExpectedObjectProp(t, "username", entry, pattern.Username())
 	assertExpectedObjectProp(t, "password", entry, pattern.Password())
@@ -409,10 +413,11 @@ func assertExpectedObject(t *testing.T, entry Entry, pattern *urlpattern.URLPatt
 	assertExpectedObjectProp(t, "pathname", entry, pattern.Pathname())
 	assertExpectedObjectProp(t, "search", entry, pattern.Search())
 	assertExpectedObjectProp(t, "hash", entry, pattern.Hash())
-
 }
 
 func assertExpectedObjectProp(t *testing.T, key string, entry Entry, value string) {
+	t.Helper()
+
 	expected := buildExpected(entry, key)
 	if expected == nil {
 		return

@@ -1,6 +1,18 @@
 version: "2"
 
 linters:
+  enable:
+    - err113
+    - goconst
+    - gocritic
+    - intrange
+    - modernize
+    - perfsprint
+    - thelper
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
   settings:
     staticcheck:
       checks:
