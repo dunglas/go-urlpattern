@@ -14,10 +14,14 @@ import (
 // https://urlpattern.spec.whatwg.org/#full-wildcard-regexp-value
 const fullWildcardRegexpValue = ".*"
 
-// DefaultPorts maps a protocol scheme to its default port string. It is
-// exported so callers can register additional schemes, but this is an
-// experimental affordance and the symbol may change or be removed in a
-// future release.
+// DefaultPorts maps a protocol scheme to its default port string.
+//
+// Callers may add entries for additional schemes, but only during program
+// initialization and before any concurrent use of this package: as with
+// any Go map, concurrent read/write is not safe.
+//
+// This is an experimental affordance and the symbol may change or be
+// removed in a future release.
 //
 // TODO: there is nothing in the Go stdlib to find the default port
 // associated with a protocol. Only the specialSchemeSet entries are

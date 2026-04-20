@@ -5,9 +5,9 @@ on:
   pull_request:
 
 env:
-  # Pin to the toolchain set up by actions/setup-go so Go does not silently
-  # download a newer one based on the go.mod toolchain directive — that
-  # would defeat the oldstable matrix entry.
+  # Pin to the toolchain set up by actions/setup-go so Go does not
+  # download or switch to a newer one automatically — that would defeat
+  # the oldstable matrix entry.
   GOTOOLCHAIN: local
 
 jobs:
