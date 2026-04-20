@@ -573,7 +573,7 @@ func canonicalizeHash(value string) (string, error) {
 	dummyURL := urlParser.NewUrl()
 	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateFragment)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	return u.Fragment(), nil
