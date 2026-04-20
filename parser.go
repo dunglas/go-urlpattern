@@ -14,10 +14,19 @@ import (
 // https://urlpattern.spec.whatwg.org/#full-wildcard-regexp-value
 const fullWildcardRegexpValue = ".*"
 
-// Experimental: this symbol is exported to allow users adding new values, but may be removed in the feature.
-// TODO: there is nothing in the Go stdlib to find the default port associated with a protocol.
-// Let's just replace values for protocols in specialSchemeSet for now.
-// This list could be completed using https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+// DefaultPorts maps a protocol scheme to its default port string.
+//
+// Callers may add entries for additional schemes, but only during program
+// initialization and before any concurrent use of this package: as with
+// any Go map, concurrent read/write is not safe.
+//
+// This is an experimental affordance and the symbol may change or be
+// removed in a future release.
+//
+// TODO: there is nothing in the Go stdlib to find the default port
+// associated with a protocol. Only the specialSchemeSet entries are
+// populated for now; the list can be completed using
+// https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers.
 var DefaultPorts = map[string]string{
 	"http":  "80",
 	"https": "443",
