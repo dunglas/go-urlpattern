@@ -390,12 +390,16 @@ func (u *URLPattern) HasRegexpGroups() bool {
 func createComponentMatchResult(component component, input string, execResult []string) URLPatternComponentResult {
 	result := URLPatternComponentResult{Input: input}
 
-	if len(execResult)-1 == 0 || (len(execResult) == 2 && execResult[0] == "" && execResult[1] == "") {
+	if len(component.groupNameList) == 0 || (len(execResult) == 2 && execResult[0] == "" && execResult[1] == "") {
 		return result
 	}
 
-	result.Groups = make(map[string]string, len(execResult)-1)
-	for index := 1; index < len(execResult); index++ {
+	result.Groups = make(map[string]string, len(component.groupNameList))
+	limit := len(execResult)
+	if namedLimit := len(component.groupNameList) + 1; namedLimit < limit {
+		limit = namedLimit
+	}
+	for index := 1; index < limit; index++ {
 		name := component.groupNameList[index-1]
 		value := execResult[index]
 

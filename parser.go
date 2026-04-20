@@ -27,7 +27,7 @@ var DefaultPorts = map[string]string{
 }
 
 var urlParser = url.NewParser()
-var hostnameParser = canonicalizer.New(url.WithFailOnValidationError(), canonicalizer.WithDefaultScheme("http"))
+var hostnameParser = canonicalizer.New(canonicalizer.WithDefaultScheme("http"))
 
 var (
 	NonEmptySuffixError      = errors.New("suffix must be the empty string")
@@ -420,10 +420,12 @@ func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
 		return hostnameValue, nil
 	}
 
-	// Dirty workaround for https://github.com/whatwg/urlpattern/issues/206
-	if hostnameValue[:1] != "[" {
+	// Non-IPv6 hostnames must not contain ':': without this guard, the URL
+	// parser would split "host:port" into host and port, silently accepting
+	// patterns like "bad:hostname" as a plain hostname.
+	if hostnameValue[0] != '[' {
 		for _, c := range hostnameValue {
-			if c == '/' || c == '?' || c == '#' || c == ':' || c == '\\' {
+			if c == ':' {
 				return "", errors.New("invalid hostname")
 			}
 		}
@@ -462,38 +464,41 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 		return portValue, nil
 	}
 
-	var (
-		u   *url.Url
-		err error
-	)
-
-	if protocolValue == "" {
-		u = hostnameParser.NewUrl()
-	} else {
-		u, err = hostnameParser.Parse(protocolValue + "://dummy.test")
-		if err != nil {
-			return "", err
+	// The WHATWG port state strips ASCII tab / LF / CR before examining the
+	// first code point, so reject inputs whose first significant byte is not
+	// an ASCII digit (e.g. "invalid80"). Without this the URL library returns
+	// an empty port instead of failing.
+	firstDigit := false
+	for i := 0; i < len(portValue); i++ {
+		c := portValue[i]
+		if c == '\t' || c == '\n' || c == '\r' {
+			continue
 		}
+		firstDigit = c >= '0' && c <= '9'
+		break
+	}
+	if !firstDigit {
+		return "", InvalidPortError
 	}
 
-	u, err = hostnameParser.BasicParser(portValue, nil, u, url.StatePort)
+	scheme := protocolValue
+	if scheme == "" {
+		// Use a non-special scheme so the URL parser does not treat a
+		// well-known default port (http/80, https/443, ...) as empty.
+		scheme = "urlpattern-non-special"
+	}
+
+	u, err := urlParser.Parse(scheme + "://dummy.test")
 	if err != nil {
 		return "", err
 	}
 
-	p := u.Port()
-
-	// This looks like a bug in the spec ("80 " should be considered valid), but there is a test covering this
-	// Another dirty workaround
-	if p != portValue {
-		if dp, ok := DefaultPorts[protocolValue]; ok && portValue == dp {
-			return p, nil
-		}
-
-		return "", InvalidPortError
+	u, err = urlParser.BasicParser(portValue, nil, u, url.StatePort)
+	if err != nil {
+		return "", err
 	}
 
-	return p, nil
+	return u.Port(), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-pathname
