@@ -1,13 +1,22 @@
 version: "2"
 
 linters:
+  enable:
+    - err113
+    - goconst
+    - gocritic
+    - intrange
+    - modernize
+    - perfsprint
+    - thelper
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
   settings:
     staticcheck:
       checks:
         - "all"
-        # ST1012: public API exports FooError variables (NoBaseURLError,
-        # InvalidPortError, ...). Renaming to ErrFoo would break consumers.
-        - "-ST1012"
         # ST1020/ST1021: exported symbols are documented with their
         # corresponding WHATWG spec URL, not a "Foo does..." sentence.
         # The URL is the most useful pointer for maintainers of a

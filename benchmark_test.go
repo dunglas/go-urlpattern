@@ -40,7 +40,7 @@ func BenchmarkNew(b *testing.B) {
 			b.ReportAllocs()
 			var p *urlpattern.URLPattern
 			var err error
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				p, err = urlpattern.New(bc.pattern, bc.baseURL, nil)
 				if err != nil {
 					b.Fatal(err)
@@ -60,7 +60,7 @@ func BenchmarkTest(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			var ok bool
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				ok = p.Test(bc.input, "")
 			}
 			benchBoolSink = ok
@@ -77,7 +77,7 @@ func BenchmarkExec(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			var r *urlpattern.URLPatternResult
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				r = p.Exec(bc.input, "")
 			}
 			benchResultSink = r

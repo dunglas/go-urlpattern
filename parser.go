@@ -39,13 +39,15 @@ var urlParser = url.NewParser()
 var hostnameParser = canonicalizer.New(canonicalizer.WithDefaultScheme("http"))
 
 var (
-	NonEmptySuffixError      = errors.New("suffix must be the empty string")
-	BadParserIndexError      = errors.New("parser's index must be less than parser's token list size")
-	DuplicatePartNameError   = errors.New("duplicate name")
-	RequiredTokenError       = errors.New("missing required token")
-	InvalidIPv6HostnameError = errors.New("invalid IPv6 hostname")
-	InvalidPortError         = errors.New("invalid port")
+	ErrNonEmptySuffix      = errors.New("suffix must be the empty string")
+	ErrBadParserIndex      = errors.New("parser's index must be less than parser's token list size")
+	ErrDuplicatePartName   = errors.New("duplicate name")
+	ErrRequiredToken       = errors.New("missing required token")
+	ErrInvalidIPv6Hostname = errors.New("invalid IPv6 hostname")
+	ErrInvalidPort         = errors.New("invalid port")
 )
+
+var errInvalidHostname = errors.New("invalid hostname")
 
 // https://urlpattern.spec.whatwg.org/#encoding-callback
 type encodingCallback func(string) (string, error)
@@ -88,7 +90,7 @@ func parsePatternString(input string, options options, encodingCallback encoding
 			}
 
 			if prefix != "" && prefix != string(options.prefixCodePoint) {
-				p.pendingFixedValue = p.pendingFixedValue + prefix
+				p.pendingFixedValue += prefix
 				prefix = ""
 			}
 
@@ -115,7 +117,7 @@ func parsePatternString(input string, options options, encodingCallback encoding
 			}
 		}
 		if fixedToken != nil {
-			p.pendingFixedValue = p.pendingFixedValue + fixedToken.value
+			p.pendingFixedValue += fixedToken.value
 
 			continue
 		}
@@ -146,7 +148,7 @@ func parsePatternString(input string, options options, encodingCallback encoding
 				return nil, err
 			}
 
-			if _, err := p.consumeRequiredToken(tokenClose); err != nil {
+			if err := p.consumeRequiredToken(tokenClose); err != nil {
 				return nil, fmt.Errorf("missing close token: %w", err)
 			}
 
@@ -166,7 +168,7 @@ func parsePatternString(input string, options options, encodingCallback encoding
 			return nil, err
 		}
 
-		if _, err := p.consumeRequiredToken(tokenEnd); err != nil {
+		if err := p.consumeRequiredToken(tokenEnd); err != nil {
 			return nil, fmt.Errorf("missing end token: %w", err)
 		}
 	}
@@ -189,7 +191,7 @@ type patternParser struct {
 func (p *patternParser) tryConsumeToken(tokenType tokenType) (*token, error) {
 	// Assert: parser’s index is less than parser’s token list size.
 	if p.index >= len(p.tokenList) {
-		return nil, BadParserIndexError
+		return nil, ErrBadParserIndex
 	}
 
 	nextToken := p.tokenList[p.index]
@@ -265,7 +267,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 	}
 
 	if nameToken == nil && regexpOrWildcardToken == nil && modifier == partModifierNone {
-		p.pendingFixedValue = p.pendingFixedValue + prefix
+		p.pendingFixedValue += prefix
 
 		return nil
 	}
@@ -277,7 +279,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 	if nameToken == nil && regexpOrWildcardToken == nil {
 		// Assert: suffix is the empty string.
 		if suffix != "" {
-			return NonEmptySuffixError
+			return ErrNonEmptySuffix
 		}
 
 		if prefix == "" {
@@ -295,12 +297,13 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 		return nil
 	}
 
-	regexpValue := ""
-	if regexpOrWildcardToken == nil {
+	var regexpValue string
+	switch {
+	case regexpOrWildcardToken == nil:
 		regexpValue = p.segmentWildcardRegexp
-	} else if regexpOrWildcardToken.tType == tokenAsterisk {
+	case regexpOrWildcardToken.tType == tokenAsterisk:
 		regexpValue = fullWildcardRegexpValue
-	} else {
+	default:
 		regexpValue = regexpOrWildcardToken.value
 	}
 
@@ -312,7 +315,6 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 	case fullWildcardRegexpValue:
 		pType = partFullWildcard
 		regexpValue = ""
-
 	}
 
 	name := ""
@@ -325,7 +327,7 @@ func (p *patternParser) addPart(prefix string, nameToken *token, regexpOrWildcar
 
 	// https://urlpattern.spec.whatwg.org/#is-a-duplicate-name
 	if _, seen := p.seenNames[name]; seen {
-		return DuplicatePartNameError
+		return ErrDuplicatePartName
 	}
 
 	encodedPrefix, err := p.encodingCallback(prefix)
@@ -373,16 +375,16 @@ func (p *patternParser) consumeText() (string, error) {
 }
 
 // https://urlpattern.spec.whatwg.org/#consume-a-required-token
-func (p *patternParser) consumeRequiredToken(tokenType tokenType) (*token, error) {
+func (p *patternParser) consumeRequiredToken(tokenType tokenType) error {
 	result, err := p.tryConsumeToken(tokenType)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if result == nil {
-		return nil, RequiredTokenError
+		return ErrRequiredToken
 	}
 
-	return result, nil
+	return nil
 }
 
 // https://urlpattern.spec.whatwg.org/#generate-a-segment-wildcard-regexp
@@ -435,7 +437,7 @@ func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
 	if hostnameValue[0] != '[' {
 		for _, c := range hostnameValue {
 			if c == ':' {
-				return "", errors.New("invalid hostname")
+				return "", errInvalidHostname
 			}
 		}
 	}
@@ -478,16 +480,17 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 	// an ASCII digit (e.g. "invalid80"). Without this the URL library returns
 	// an empty port instead of failing.
 	firstDigit := false
-	for i := 0; i < len(portValue); i++ {
+	for i := range len(portValue) {
 		c := portValue[i]
 		if c == '\t' || c == '\n' || c == '\r' {
 			continue
 		}
 		firstDigit = c >= '0' && c <= '9'
+
 		break
 	}
 	if !firstDigit {
-		return "", InvalidPortError
+		return "", ErrInvalidPort
 	}
 
 	scheme := protocolValue
@@ -595,7 +598,7 @@ func canonicalizeIPv6Hostname(value string) (string, error) {
 
 	for _, c := range value {
 		if c != '[' && c != ']' && c != ':' && !unicode.Is(unicode.ASCII_Hex_Digit, c) {
-			return "", InvalidIPv6HostnameError
+			return "", ErrInvalidIPv6Hostname
 		}
 
 		result.WriteRune(unicode.ToLower(c))

@@ -35,7 +35,7 @@ func init() {
 func escapeRegexpString(s string) string {
 	// A byte loop is correct because all metacharacters are ASCII.
 	var i int
-	for i = 0; i < len(s); i++ {
+	for i = 0; i < len(s); i++ { //nolint:intrange // i is reused below
 		if specialRegexp(s[i]) {
 			break
 		}
@@ -63,7 +63,7 @@ func escapeRegexpString(s string) string {
 func escapePatternString(s string) string {
 	// A byte loop is correct because all metacharacters are ASCII.
 	var i int
-	for i = 0; i < len(s); i++ {
+	for i = 0; i < len(s); i++ { //nolint:intrange // i is reused below
 		if specialPattern(s[i]) {
 			break
 		}

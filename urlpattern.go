@@ -12,8 +12,14 @@ import (
 )
 
 var (
-	NoBaseURLError             = errors.New("relative URL and no baseURL provided")
-	UnexpectedEmptyStringError = errors.New("unexpected empty string")
+	ErrNoBaseURL             = errors.New("relative URL and no baseURL provided")
+	ErrUnexpectedEmptyString = errors.New("unexpected empty string")
+)
+
+// Init-processing mode per https://urlpattern.spec.whatwg.org/#process-a-urlpatterninit.
+const (
+	initTypePattern = "pattern"
+	initTypeURL     = "url"
 )
 
 // https://url.spec.whatwg.org/#special-scheme
@@ -123,7 +129,7 @@ func New(input string, baseURL string, options *Options) (*URLPattern, error) {
 	}
 
 	if baseURL == "" && init.Protocol == nil {
-		return nil, NoBaseURLError
+		return nil, ErrNoBaseURL
 	}
 
 	if baseURL != "" {
@@ -139,7 +145,7 @@ func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
 		opt = &Options{}
 	}
 
-	processedInit, err := init.process("pattern", nil, nil, nil, nil, nil, nil, nil, nil)
+	processedInit, err := init.process(initTypePattern, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -208,21 +214,16 @@ func (init *URLPatternInit) New(opt *Options) (*URLPattern, error) {
 	protocolMatchesSpecialScheme := urlPattern.protocol.protocolComponentMatchesSpecialScheme()
 
 	hostnameOptions := options{delimiterCodePoint: '.'}
-	if hostnamePatternIsIPv6Address(*processedInit.Hostname) {
+	switch {
+	case hostnamePatternIsIPv6Address(*processedInit.Hostname):
 		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeIPv6Hostname, hostnameOptions)
-		if err != nil {
-			return nil, err
-		}
-	} else if protocolMatchesSpecialScheme || *processedInit.Protocol == "*" {
+	case protocolMatchesSpecialScheme || *processedInit.Protocol == "*":
 		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, canonicalizeDomainName, hostnameOptions)
-		if err != nil {
-			return nil, err
-		}
-	} else {
+	default:
 		urlPattern.hostname, err = compileComponent(*processedInit.Hostname, func(s string) (string, error) { return canonicalizeHostname(s, "") }, hostnameOptions)
-		if err != nil {
-			return nil, err
-		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	urlPattern.port, err = compileComponent(*processedInit.Port, func(s string) (string, error) { return canonicalizePort(s, "") }, defaultOptions)
@@ -276,7 +277,7 @@ func (u *URLPattern) ExecInit(input *URLPatternInit) *URLPatternResult {
 
 	inputs := []*URLPatternInit{input}
 
-	applyResult, err := input.process("url", &protocol, &username, &password, &hostname, &port, &pathname, &search, &hash)
+	applyResult, err := input.process(initTypeURL, &protocol, &username, &password, &hostname, &port, &pathname, &search, &hash)
 	if err != nil {
 		return nil
 	}
@@ -300,15 +301,6 @@ func (u *URLPattern) ExecInit(input *URLPatternInit) *URLPatternResult {
 
 // https://urlpattern.spec.whatwg.org/#dom-urlpattern-exec
 func (u *URLPattern) Exec(input, baseURLString string) *URLPatternResult {
-	protocol := ""
-	username := ""
-	password := ""
-	hostname := ""
-	port := ""
-	pathname := ""
-	search := ""
-	hash := ""
-
 	inputs := []string{input}
 
 	var baseURL *url.Url
@@ -328,16 +320,10 @@ func (u *URLPattern) Exec(input, baseURLString string) *URLPatternResult {
 		return nil
 	}
 
-	protocol = ur.Scheme()
-	username = ur.Username()
-	password = ur.Password()
-	hostname = ur.Hostname()
-	port = ur.Port()
-	pathname = ur.Pathname()
-	search = ur.Query()
-	hash = ur.Fragment()
-
-	r := u.match(protocol, username, password, hostname, port, pathname, search, hash)
+	r := u.match(
+		ur.Scheme(), ur.Username(), ur.Password(), ur.Hostname(),
+		ur.Port(), ur.Pathname(), ur.Query(), ur.Fragment(),
+	)
 	if r != nil {
 		r.Inputs = inputs
 	}
@@ -464,12 +450,12 @@ func (init *URLPatternInit) process(iType string, protocol, username, password, 
 
 		// TODO: the end of this block can be simplified, but let's be as close as possible from the standard algorithm for now
 
-		if iType != "pattern" && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil {
+		if iType != initTypePattern && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil {
 			u := processBaseURLString(baseURL.Username(), iType)
 			result.Username = &u
 		}
 
-		if iType != "pattern" && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil && init.Password == nil {
+		if iType != initTypePattern && init.Protocol == nil && init.Hostname == nil && init.Port == nil && init.Username == nil && init.Password == nil {
 			password := baseURL.Password()
 			p := processBaseURLString(password, iType)
 			result.Password = &p
@@ -599,7 +585,7 @@ func (init *URLPatternInit) process(iType string, protocol, username, password, 
 
 // https://urlpattern.spec.whatwg.org/#process-a-base-url-string
 func processBaseURLString(input, uType string) string {
-	if uType != "pattern" {
+	if uType != initTypePattern {
 		return input
 	}
 
@@ -610,7 +596,7 @@ func processBaseURLString(input, uType string) string {
 func processProtocolForInit(value, pType string) (string, error) {
 	strippedValue := strings.TrimSuffix(value, ":")
 
-	if pType == "pattern" {
+	if pType == initTypePattern {
 		return strippedValue, nil
 	}
 
@@ -619,7 +605,7 @@ func processProtocolForInit(value, pType string) (string, error) {
 
 // https://urlpattern.spec.whatwg.org/#process-username-for-init
 func processUsernameForInit(value, uType string) (string, error) {
-	if uType == "pattern" {
+	if uType == initTypePattern {
 		return value, nil
 	}
 
@@ -628,7 +614,7 @@ func processUsernameForInit(value, uType string) (string, error) {
 
 // https://urlpattern.spec.whatwg.org/#process-password-for-init
 func processPasswordForInit(value, uType string) (string, error) {
-	if uType == "pattern" {
+	if uType == initTypePattern {
 		return value, nil
 	}
 
@@ -637,7 +623,7 @@ func processPasswordForInit(value, uType string) (string, error) {
 
 // https://urlpattern.spec.whatwg.org/#process-hostname-for-init
 func processHostnameForInit(value, protocolValue, uType string) (string, error) {
-	if uType == "pattern" {
+	if uType == initTypePattern {
 		return value, nil
 	}
 
@@ -654,7 +640,7 @@ func processHostnameForInit(value, protocolValue, uType string) (string, error) 
 
 // https://urlpattern.spec.whatwg.org/#process-port-for-init
 func processPortForInit(portValue, protocolValue, pType string) (string, error) {
-	if pType == "pattern" {
+	if pType == initTypePattern {
 		return portValue, nil
 	}
 
@@ -663,7 +649,7 @@ func processPortForInit(portValue, protocolValue, pType string) (string, error) 
 
 // https://urlpattern.spec.whatwg.org/#process-pathname-for-init
 func processPathnameForInit(pathnameValue, protocolValue, ptype string) (string, error) {
-	if ptype == "pattern" {
+	if ptype == initTypePattern {
 		return pathnameValue, nil
 	}
 
@@ -682,7 +668,7 @@ func processPathnameForInit(pathnameValue, protocolValue, ptype string) (string,
 func processSearchForInit(value, sType string) (string, error) {
 	strippedValue := strings.TrimPrefix(value, "?")
 
-	if sType == "pattern" {
+	if sType == initTypePattern {
 		return strippedValue, nil
 	}
 
@@ -693,7 +679,7 @@ func processSearchForInit(value, sType string) (string, error) {
 func processHashForInit(value, hType string) (string, error) {
 	strippedValue := strings.TrimPrefix(value, "#")
 
-	if hType == "pattern" {
+	if hType == initTypePattern {
 		return strippedValue, nil
 	}
 
@@ -710,7 +696,7 @@ func isAbsolutePathname(input, pType string) bool {
 		return true
 	}
 
-	if pType == "url" {
+	if pType == initTypeURL {
 		return false
 	}
 
