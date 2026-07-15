@@ -421,6 +421,18 @@ func (p *constructorTypeParser) isIPV6Close() bool {
 	return p.isNonSpecialPatternChar(p.tokenIndex, "]")
 }
 
+// Precompiled regular expressions for the component patterns that recur across
+// nearly every URLPattern: the full wildcard (the default for username,
+// password, search and hash) and the empty component (a common port). Compiled
+// once at init; a *regexp.Regexp is safe for concurrent use, so the same
+// instance is shared by every component whose generated expression matches.
+var sharedComponentRegexps = map[string]*regexp.Regexp{ //nolint:gochecknoglobals
+	`\A(?:(.*))\z`:     regexp.MustCompile(`\A(?:(.*))\z`),
+	`(?i)\A(?:(.*))\z`: regexp.MustCompile(`(?i)\A(?:(.*))\z`),
+	`\A(?:)\z`:         regexp.MustCompile(`\A(?:)\z`),
+	`(?i)\A(?:)\z`:     regexp.MustCompile(`(?i)\A(?:)\z`),
+}
+
 // https://urlpattern.spec.whatwg.org/#compile-a-component
 func compileComponent(input string, encodencodingCallback encodingCallback, options options) (*component, error) {
 	partList, err := parsePatternString(input, options, encodencodingCallback)
@@ -434,9 +446,19 @@ func compileComponent(input string, encodencodingCallback encodingCallback, opti
 		return nil, err
 	}
 
-	regularExpression, err := regexp.Compile(regularExpressionString)
-	if err != nil {
-		return nil, err
+	// Most components of a typical pattern are the full wildcard or empty:
+	// username, password, search and hash default to the full wildcard and the
+	// port is often empty. Their generated regular expressions are a tiny fixed
+	// set of constant strings, so reuse a shared precompiled *regexp.Regexp
+	// (safe for concurrent use) instead of paying regexp.Compile per component.
+	regularExpression, ok := sharedComponentRegexps[regularExpressionString]
+	if !ok {
+		var err error
+
+		regularExpression, err = regexp.Compile(regularExpressionString)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	patternString, err := partList.generatePatternString(options)
