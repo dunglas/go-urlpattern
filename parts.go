@@ -20,10 +20,10 @@ const (
 )
 
 var (
-	ErrEmptyPartName    = errors.New("part's name must not be empty string")
-	ErrInvalidModifier  = errors.New(`part's modifier must be "zero-or-more" or "one-or-more"`)
+	ErrEmptyPartName         = errors.New("part's name must not be empty string")
+	ErrInvalidModifier       = errors.New(`part's modifier must be "zero-or-more" or "one-or-more"`)
 	ErrInvalidPrefixOrSuffix = errors.New("part's prefix is not the empty string or part's suffix is not the empty string")
-	ErrInvalidPartName  = errors.New("part's name is not the empty string or null")
+	ErrInvalidPartName       = errors.New("part's name is not the empty string or null")
 )
 
 type partModifier uint8
