@@ -34,11 +34,11 @@ const (
 )
 
 type Entry struct {
-	Pattern                []any `json:"pattern"`
-	Inputs                 []any `json:"inputs"`
-	ExactlyEmptyComponents []string      `json:"exactly_empty_components"`
-	ExpectedObj            any   `json:"expected_obj"`
-	ExpectedMatch          any   `json:"expected_match"`
+	Pattern                []any    `json:"pattern"`
+	Inputs                 []any    `json:"inputs"`
+	ExactlyEmptyComponents []string `json:"exactly_empty_components"`
+	ExpectedObj            any      `json:"expected_obj"`
+	ExpectedMatch          any      `json:"expected_match"`
 }
 
 func TestURLPattern(t *testing.T) {
