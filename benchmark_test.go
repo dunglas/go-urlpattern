@@ -6,10 +6,12 @@ import (
 	"github.com/dunglas/go-urlpattern"
 )
 
+const benchExampleURL = "https://example.com/foo/bar"
+
 var benchmarkPatterns = []struct {
 	name, pattern, baseURL string
 }{
-	{"simple", "https://example.com/foo/bar", ""},
+	{"simple", benchExampleURL, ""},
 	{"wildcard", "https://*.example.com/*", ""},
 	{"named", "https://example.com/users/:id/posts/:postId", ""},
 	{"regex", "https://example.com/items/(\\d+)", ""},
@@ -19,7 +21,7 @@ var benchmarkPatterns = []struct {
 var benchmarkMatches = []struct {
 	name, pattern, input string
 }{
-	{"simple", "https://example.com/foo/bar", "https://example.com/foo/bar"},
+	{"simple", benchExampleURL, benchExampleURL},
 	{"wildcard", "https://*.example.com/*", "https://api.example.com/users/42"},
 	{"named", "https://example.com/users/:id/posts/:postId", "https://example.com/users/42/posts/7"},
 	{"regex", "https://example.com/items/(\\d+)", "https://example.com/items/12345"},

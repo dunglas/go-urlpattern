@@ -24,6 +24,15 @@ var (
 	errBaseURLWithInit     = errors.New("invalid second argument: baseURL provided with a URLPatternInit input; use URLPatternInit.BaseURL instead")
 )
 
+const (
+	componentProtocol = "protocol"
+	componentHostname = "hostname"
+	componentPort     = "port"
+	componentPathname = "pathname"
+	componentSearch   = "search"
+	componentHash     = "hash"
+)
+
 type Entry struct {
 	Pattern                []any `json:"pattern"`
 	Inputs                 []any `json:"inputs"`
@@ -82,7 +91,7 @@ func TestURLPattern(t *testing.T) {
 			if err != nil {
 				if len(entry.Inputs) == 1 {
 					if i, ok := entry.Inputs[0].(map[string]any); ok {
-						if p, _ := i["protocol"].(string); p == "café" {
+						if p, _ := i[componentProtocol].(string); p == "café" {
 							t.Skip("TODO: check why this fails, probably a bug in the test suite")
 						}
 					}
@@ -97,7 +106,7 @@ func TestURLPattern(t *testing.T) {
 			if testResult != expectedTestResult {
 				if len(entry.Pattern) > 0 {
 					e, _ := entry.Pattern[0].(map[string]any)
-					if pa := e["pathname"]; pa != nil {
+					if pa := e[componentPathname]; pa != nil {
 						p := pa.(string)
 						if strings.Contains(p, "[") && (strings.Contains(p, "--") || strings.Contains(p, "&&")) {
 							t.Skip("Advanced unicode features aren't supported by Go")
@@ -222,7 +231,7 @@ func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
 		}
 
 		switch k {
-		case "protocol":
+		case componentProtocol:
 			expectedResult.Protocol = component
 
 		case "username":
@@ -231,19 +240,19 @@ func newExpectedResult(e Entry) *urlpattern.URLPatternResult {
 		case "password":
 			expectedResult.Password = component
 
-		case "hostname":
+		case componentHostname:
 			expectedResult.Hostname = component
 
-		case "port":
+		case componentPort:
 			expectedResult.Port = component
 
-		case "pathname":
+		case componentPathname:
 			expectedResult.Pathname = component
 
-		case "search":
+		case componentSearch:
 			expectedResult.Search = component
 
-		case "hash":
+		case componentHash:
 			expectedResult.Hash = component
 		}
 	}
@@ -305,24 +314,24 @@ func callExec(pattern *urlpattern.URLPattern, entry Entry) (*urlpattern.URLPatte
 
 func initFromObj(m map[string]any) *urlpattern.URLPatternInit {
 	return &urlpattern.URLPatternInit{
-		Protocol: stringOrNil(m["protocol"]),
+		Protocol: stringOrNil(m[componentProtocol]),
 		Username: stringOrNil(m["username"]),
 		Password: stringOrNil(m["password"]),
-		Hostname: stringOrNil(m["hostname"]),
-		Port:     stringOrNil(m["port"]),
-		Pathname: stringOrNil(m["pathname"]),
-		Search:   stringOrNil(m["search"]),
-		Hash:     stringOrNil(m["hash"]),
+		Hostname: stringOrNil(m[componentHostname]),
+		Port:     stringOrNil(m[componentPort]),
+		Pathname: stringOrNil(m[componentPathname]),
+		Search:   stringOrNil(m[componentSearch]),
+		Hash:     stringOrNil(m[componentHash]),
 		BaseURL:  stringOrNil(m["baseURL"]),
 	}
 }
 
 var earlierComponents = map[string][]string{
-	"hostname": {"protocol"},
-	"port":     {"protocol", "hostname"},
-	"pathname": {"protocol", "hostname", "port"},
-	"search":   {"protocol", "hostname", "port", "pathname"},
-	"hash":     {"protocol", "hostname", "port", "pathname", "search"},
+	componentHostname: {componentProtocol},
+	componentPort:     {componentProtocol, componentHostname},
+	componentPathname: {componentProtocol, componentHostname, componentPort},
+	componentSearch:   {componentProtocol, componentHostname, componentPort, componentPathname},
+	componentHash:     {componentProtocol, componentHostname, componentPort, componentPathname, componentSearch},
 }
 
 func buildExpected(entry Entry, component string) *string {
@@ -361,23 +370,23 @@ func buildExpected(entry Entry, component string) *string {
 				if baseURL != nil && component != "username" && component != "password" {
 					var baseValue string
 					switch component {
-					case "protocol":
+					case componentProtocol:
 						baseValue = baseURL.Protocol()
 						baseValue = baseValue[:len(baseValue)-1]
 
-					case "hostname":
+					case componentHostname:
 						baseValue = baseURL.Hostname()
 
-					case "port":
+					case componentPort:
 						baseValue = baseURL.Port()
 
-					case "pathname":
+					case componentPathname:
 						baseValue = baseURL.Pathname()
 
-					case "search":
+					case componentSearch:
 						baseValue = baseURL.Search()[1:]
 
-					case "hash":
+					case componentHash:
 						baseValue = baseURL.Hash()[1:]
 					}
 
@@ -405,14 +414,14 @@ func buildExpected(entry Entry, component string) *string {
 func assertExpectedObject(t *testing.T, entry Entry, pattern *urlpattern.URLPattern) {
 	t.Helper()
 
-	assertExpectedObjectProp(t, "protocol", entry, pattern.Protocol())
+	assertExpectedObjectProp(t, componentProtocol, entry, pattern.Protocol())
 	assertExpectedObjectProp(t, "username", entry, pattern.Username())
 	assertExpectedObjectProp(t, "password", entry, pattern.Password())
-	assertExpectedObjectProp(t, "hostname", entry, pattern.Hostname())
-	assertExpectedObjectProp(t, "port", entry, pattern.Port())
-	assertExpectedObjectProp(t, "pathname", entry, pattern.Pathname())
-	assertExpectedObjectProp(t, "search", entry, pattern.Search())
-	assertExpectedObjectProp(t, "hash", entry, pattern.Hash())
+	assertExpectedObjectProp(t, componentHostname, entry, pattern.Hostname())
+	assertExpectedObjectProp(t, componentPort, entry, pattern.Port())
+	assertExpectedObjectProp(t, componentPathname, entry, pattern.Pathname())
+	assertExpectedObjectProp(t, componentSearch, entry, pattern.Search())
+	assertExpectedObjectProp(t, componentHash, entry, pattern.Hash())
 }
 
 func assertExpectedObjectProp(t *testing.T, key string, entry Entry, value string) {
