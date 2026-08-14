@@ -1,10 +1,9 @@
-package urlpattern_test
+// Package-internal (not urlpattern_test): OSS-Fuzz's go-118-fuzz-build tool
+// locates a FuzzXxx function by matching the package path exactly, which
+// excludes the external test package variant.
+package urlpattern
 
-import (
-	"testing"
-
-	"github.com/dunglas/go-urlpattern"
-)
+import "testing"
 
 func FuzzNew(f *testing.F) {
 	patterns := []string{
@@ -27,7 +26,7 @@ func FuzzNew(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, pattern, baseURL string) {
-		p, err := urlpattern.New(pattern, baseURL, nil)
+		p, err := New(pattern, baseURL, nil)
 		if err != nil || p == nil {
 			return
 		}
@@ -58,7 +57,7 @@ func FuzzURLPatternInit(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, protocol, hostname, port, pathname, search string) {
-		init := &urlpattern.URLPatternInit{
+		init := &URLPatternInit{
 			Protocol: &protocol,
 			Hostname: &hostname,
 			Port:     &port,
