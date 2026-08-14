@@ -1,4 +1,7 @@
-package urlpattern_test
+// Package fuzz holds the OSS-Fuzz harness in its own directory so its
+// FuzzXxx functions live in an internal (non "_test") package, which is
+// what go-118-fuzz-build requires to find them.
+package fuzz
 
 import (
 	"testing"
