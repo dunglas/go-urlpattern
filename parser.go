@@ -461,7 +461,15 @@ func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
 		return "", err
 	}
 
-	return u.Hostname(), nil
+	// The underlying URL parser silently drops forbidden host code points
+	// (e.g. "#") instead of failing, turning a non-empty input into an empty
+	// hostname. That empty result later reaches partList.generatePatternString
+	// as a fixed-text part, which assumes non-empty values and panics.
+	if hostname := u.Hostname(); hostname != "" {
+		return hostname, nil
+	}
+
+	return "", errInvalidHostname
 }
 
 // https://github.com/whatwg/urlpattern/issues/220#issuecomment-2074613501

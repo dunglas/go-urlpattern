@@ -214,8 +214,11 @@ func (pl partList) generatePatternString(options options) (string, error) {
 			nextPart != nil &&
 			nextPart.prefix == "" &&
 			nextPart.suffix == "" {
+			// A fixed-text part's value can be empty: some encoding callbacks
+			// (e.g. hostname/pathname canonicalization) can collapse a non-empty
+			// prefix/suffix down to "" for syntax-only input such as "#".
 			if nextPart.pType == partFixedText {
-				if isValidNameCodePoint([]rune(nextPart.value)[0], false) {
+				if nextPart.value != "" && isValidNameCodePoint([]rune(nextPart.value)[0], false) {
 					needGrouping = true
 				}
 			} else if unicode.IsDigit([]rune(nextPart.name)[0]) {
@@ -227,6 +230,7 @@ func (pl partList) generatePatternString(options options) (string, error) {
 			part.prefix == "" &&
 			previousPart != nil &&
 			previousPart.pType == partFixedText &&
+			previousPart.value != "" &&
 			[]rune(previousPart.value)[len(previousPart.value)-1] == rune(options.prefixCodePoint) {
 			needGrouping = true
 		}
