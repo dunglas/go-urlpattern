@@ -5,9 +5,7 @@ on:
   pull_request:
 
 env:
-  # Pin to the toolchain set up by actions/setup-go so Go does not
-  # download or switch to a newer one automatically — that would defeat
-  # the oldstable matrix entry.
+  # Test with the toolchain actions/setup-go installed, never a downloaded one.
   GOTOOLCHAIN: local
 
 jobs:
@@ -30,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['oldstable', 'stable']
+        # whatwg-url v0.8.0+ requires Go 1.27: restore oldstable once Go 1.28 ships.
+        go-version: ['stable']
     steps:
     - name: Checkout
       uses: actions/checkout@v6

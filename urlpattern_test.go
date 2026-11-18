@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/dunglas/go-urlpattern"
-	"github.com/nlnwa/whatwg-url/url"
+	"github.com/nationallibraryofnorway/whatwg-url/url"
 )
 
 // Port of https://github.com/web-platform-tests/wpt/blob/d3e55612911b00cb53271476de610e75a8603ae7/urlpattern/resources/urlpatterntests.js

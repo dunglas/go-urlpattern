@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nlnwa/whatwg-url/url"
+	"github.com/nationallibraryofnorway/whatwg-url/url"
 )
 
 var (
@@ -315,7 +315,7 @@ func (u *URLPattern) Exec(input, baseURLString string) *URLPatternResult {
 		inputs = append(inputs, baseURLString)
 	}
 
-	ur, err := urlParser.BasicParser(input, baseURL, nil, url.NoState)
+	ur, err := basicParse(urlParser, input, baseURL, nil, url.NoState)
 	if err != nil {
 		return nil
 	}
