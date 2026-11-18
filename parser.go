@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nlnwa/whatwg-url/canonicalizer"
-	"github.com/nlnwa/whatwg-url/url"
+	"github.com/nationallibraryofnorway/whatwg-url/canonicalizer"
+	"github.com/nationallibraryofnorway/whatwg-url/url"
 )
 
 // https://urlpattern.spec.whatwg.org/#full-wildcard-regexp-value
@@ -36,7 +36,17 @@ var DefaultPorts = map[string]string{
 }
 
 var urlParser = url.NewParser()
-var hostnameParser = canonicalizer.New(canonicalizer.WithDefaultScheme("http"))
+
+// The Parser interface does not expose the state-override entry points.
+func newURL(p url.Parser) *url.Url {
+	return p.(interface{ NewUrl() *url.Url }).NewUrl()
+}
+
+func basicParse(p url.Parser, input string, base, u *url.Url, state url.State) (*url.Url, error) {
+	return p.(url.BasicParsing).BasicParse(input, base, u, state)
+}
+
+var hostnameParser = canonicalizer.New().WithDefaultScheme("http")
 
 var (
 	ErrNonEmptySuffix      = errors.New("suffix must be the empty string")
@@ -412,7 +422,7 @@ func canonicalizeUsername(value string) (string, error) {
 		return value, nil
 	}
 
-	return urlParser.PercentEncodeString(value, url.UserInfoPercentEncodeSet), nil
+	return url.PercentEncode(value, url.UserInfoPercentEncodeSet), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-password
@@ -421,7 +431,7 @@ func canonicalizePassword(value string) (string, error) {
 		return value, nil
 	}
 
-	return urlParser.PercentEncodeString(value, url.UserInfoPercentEncodeSet), nil
+	return url.PercentEncode(value, url.UserInfoPercentEncodeSet), nil
 }
 
 // https://urlpattern.spec.whatwg.org/#canonicalize-a-hostname
@@ -448,7 +458,7 @@ func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
 	)
 
 	if protocolValue == "" {
-		u = hostnameParser.NewUrl()
+		u = newURL(hostnameParser.Parser())
 	} else {
 		u, err = hostnameParser.Parse(protocolValue + "://dummy.test")
 		if err != nil {
@@ -456,7 +466,7 @@ func canonicalizeHostname(hostnameValue, protocolValue string) (string, error) {
 		}
 	}
 
-	u, err = hostnameParser.BasicParser(hostnameValue, nil, u, url.StateHostname)
+	u, err = basicParse(hostnameParser.Parser(), hostnameValue, nil, u, url.StateHostname)
 	if err != nil {
 		return "", err
 	}
@@ -513,7 +523,7 @@ func canonicalizePort(portValue, protocolValue string) (string, error) {
 		return "", err
 	}
 
-	u, err = urlParser.BasicParser(portValue, nil, u, url.StatePort)
+	u, err = basicParse(urlParser, portValue, nil, u, url.StatePort)
 	if err != nil {
 		return "", err
 	}
@@ -537,8 +547,8 @@ func canonicalizePathname(value string) (string, error) {
 
 	modifiedValue.WriteString(value)
 
-	dummyURL := urlParser.NewUrl()
-	u, err := urlParser.BasicParser(modifiedValue.String(), nil, dummyURL, url.StatePathStart)
+	dummyURL := newURL(urlParser)
+	u, err := basicParse(urlParser, modifiedValue.String(), nil, dummyURL, url.StatePathStart)
 	if err != nil {
 		return "", err
 	}
@@ -559,9 +569,9 @@ func canonicalizeOpaquePathname(value string) (string, error) {
 	}
 
 	var err error
-	dummyURL := urlParser.NewUrl()
+	dummyURL := newURL(urlParser)
 
-	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateOpaquePath)
+	u, err := basicParse(urlParser, value, nil, dummyURL, url.StateOpaquePath)
 	if err != nil {
 		return "", err
 	}
@@ -575,9 +585,9 @@ func canonicalizeSearch(value string) (string, error) {
 		return value, nil
 	}
 
-	dummyURL := urlParser.NewUrl()
+	dummyURL := newURL(urlParser)
 
-	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateQuery)
+	u, err := basicParse(urlParser, value, nil, dummyURL, url.StateQuery)
 	if err != nil {
 		return "", err
 	}
@@ -591,8 +601,8 @@ func canonicalizeHash(value string) (string, error) {
 		return value, nil
 	}
 
-	dummyURL := urlParser.NewUrl()
-	u, err := urlParser.BasicParser(value, nil, dummyURL, url.StateFragment)
+	dummyURL := newURL(urlParser)
+	u, err := basicParse(urlParser, value, nil, dummyURL, url.StateFragment)
 	if err != nil {
 		return "", err
 	}
